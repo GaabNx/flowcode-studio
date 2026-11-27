@@ -1,0 +1,3584 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlowCode Studio — Generator Flowchart Otomatis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        whimsical: {
+                            50: '#F5F3FF',
+                            100: '#EDE9FE',
+                            200: '#DDD6FE',
+                            300: '#C4B5FD',
+                            400: '#A78BFA',
+                            500: '#7C5DFA',
+                            600: '#6D4AFF',
+                            700: '#5B39E6',
+                            800: '#492EC2',
+                            900: '#3B269E',
+                        }
+                    },
+                    boxShadow: {
+                        'whim-card': '0 2px 8px -2px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.04)',
+                        'whim-float': '0 10px 28px -6px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.05)',
+                    }
+                }
+            }
+        };
+    </script>
+    <style>
+        /* Latar titik halus ala Whimsical.com */
+        .whimsical-dot-grid {
+            --grid-size: 20px;
+            background-color: #FAFAFC;
+            background-image: radial-gradient(#CBD5E1 1.15px, transparent 1.15px);
+            background-size: var(--grid-size) var(--grid-size);
+        }
+        .dark .whimsical-dot-grid {
+            --grid-size: 20px;
+            background-color: #0B0F19;
+            background-image: radial-gradient(#1E293B 1.15px, transparent 1.15px);
+            background-size: var(--grid-size) var(--grid-size);
+        }
+        .no-grid {
+            background-image: none !important;
+        }
+
+        /* Scrollbar halus */
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.45);
+            border-radius: 9999px;
+        }
+        /* Interaksi node & handle SVG: Klik Kiri = Select/Move, Klik Kanan = Hand Pan */
+        .fc-node-group {
+            cursor: grab;
+        }
+        .fc-node-group.dragging-node {
+            cursor: grabbing;
+        }
+        #canvas-viewport {
+            cursor: default;
+        }
+        #canvas-viewport.is-panning,
+        #canvas-viewport.is-panning * {
+            cursor: grabbing !important;
+        }
+        #canvas-viewport.space-panning {
+            cursor: grab !important;
+        }
+
+        /* Titik kontrol belokan garis (edge handle) bebas glitch */
+        .edge-handle-group {
+            cursor: pointer;
+        }
+        .edge-handle-visual {
+            transform-box: fill-box;
+            transform-origin: center;
+            transition: transform 0.14s ease, fill 0.14s ease;
+        }
+        .edge-handle-group:hover .edge-handle-visual {
+            transform: scale(1.22);
+        }
+
+        /* Label panah (Ya / Tidak / label custom) bisa digeser sepanjang garis */
+        .edge-label-group {
+            cursor: grab;
+        }
+        .edge-label-group:active {
+            cursor: grabbing;
+        }
+
+        /* Titik resize 8 arah */
+        .resize-handle {
+            transform-box: fill-box;
+            transform-origin: center;
+            transition: transform 0.12s ease;
+        }
+        .resize-handle:hover {
+            transform: scale(1.25);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 select-none font-sans">
+
+    <!-- Top Navigation Bar (Gaya Whimsical) -->
+    <header class="h-14 shrink-0 px-3 sm:px-4 border-b border-[#E5E7EB] dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur flex items-center justify-between gap-2 z-30">
+        <!-- Brand & Template -->
+        <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-2xl bg-[#7C5DFA] text-white flex items-center justify-center shadow-sm shrink-0">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="2"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="2"></rect>
+                    <path d="M10 6.5h4a2 2 0 0 1 2 2v5.5"></path>
+                    <path d="m13.5 11.5 2.5 2.5 2.5-2.5"></path>
+                </svg>
+            </div>
+            <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-sm sm:text-base tracking-tight text-slate-900 dark:text-white truncate">FlowCode Studio</span>
+                    <span class="hidden md:inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full bg-[#F3F0FF] text-[#6D28D9] dark:bg-whimsical-500/20 dark:text-whimsical-200">
+                        Direct Edit + HD Copy
+                    </span>
+                </div>
+            </div>
+
+            <div class="hidden sm:block h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+
+            <div class="hidden sm:flex items-center gap-1.5">
+                <label for="template-select" class="text-xs font-medium text-slate-500 dark:text-slate-400">Template:</label>
+                <select id="template-select" onchange="loadTemplate(this.value)" class="text-xs font-medium bg-[#FAFAFC] dark:bg-slate-800 border border-[#E5E7EB] dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#7C5DFA]/40 cursor-pointer">
+                    <option value="string_length">Panjang String (Loop &amp; Output)</option>
+                    <option value="avg_score">Rata-Rata Nilai Mahasiswa</option>
+                    <option value="iot_flood">IoT Deteksi Banjir</option>
+                    <option value="auth_flow">Login &amp; Validasi Akun</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Right Controls: Undo/Redo, Full Canvas, Copy HD, Export, Theme -->
+        <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <!-- Undo / Redo -->
+            <div class="flex items-center bg-[#FAFAFC] dark:bg-slate-800 border border-[#E5E7EB] dark:border-slate-700 rounded-xl p-0.5">
+                <button id="btn-undo" onclick="undoAction()" disabled title="Undo (Ctrl+Z)" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-35 disabled:pointer-events-none transition">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>
+                </button>
+                <div class="w-px h-4 bg-slate-200 dark:bg-slate-700"></div>
+                <button id="btn-redo" onclick="redoAction()" disabled title="Redo (Ctrl+Y)" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-35 disabled:pointer-events-none transition">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"></path></svg>
+                </button>
+            </div>
+
+            <!-- Toggle Editor / Mode Kanvas Penuh -->
+            <button id="btn-toggle-editor" onclick="toggleEditorPanel()" class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                <svg class="w-3.5 h-3.5 text-[#7C5DFA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M9 3v18"></path></svg>
+                <span id="toggle-editor-label">Mode Kanvas Penuh</span>
+            </button>
+
+            <!-- Copy HD Split Button (JPG/PNG 3x & 4x Tanpa Margin, Langsung ke Clipboard) -->
+            <div class="relative flex items-center">
+                <button id="btn-copy-hd" onclick="copyDiagramToClipboard()" title="Salin gambar resolusi tinggi tanpa margin langsung ke clipboard (Ctrl+Shift+C)" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-l-xl bg-[#7C5DFA] hover:bg-[#6D4AFF] text-white shadow-sm transition">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+                    <span id="copy-hd-label">Copy HD (JPG 3x)</span>
+                </button>
+                <button onclick="toggleCopyOptions(event)" title="Pilih kualitas & format Copy HD" class="px-2 py-1.5 text-xs font-semibold rounded-r-xl bg-[#6D4AFF] hover:bg-[#5B39E6] text-white border-l border-white/20 transition">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"></path></svg>
+                </button>
+
+                <!-- Popover Pengaturan Copy HD -->
+                <div id="copy-options-popover" class="hidden absolute right-0 top-11 w-64 rounded-2xl bg-white dark:bg-slate-900 shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 p-3 z-50 text-xs">
+                    <div class="font-semibold text-slate-800 dark:text-slate-100 mb-2">Pengaturan Copy HD (Tanpa Margin)</div>
+                    <div class="space-y-2.5">
+                        <div>
+                            <label class="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Format Gambar</label>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <button id="opt-fmt-jpg" onclick="setCopyFormat('jpg')" class="py-1.5 px-2 rounded-xl font-semibold border border-[#7C5DFA] bg-[#F3F0FF] text-[#6D28D9] transition">JPG (98% HD)</button>
+                                <button id="opt-fmt-png" onclick="setCopyFormat('png')" class="py-1.5 px-2 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition">PNG Lossless</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">Skala Resolusi</label>
+                            <div class="grid grid-cols-2 gap-1.5">
+                                <button id="opt-scale-3" onclick="setCopyScale(3)" class="py-1.5 px-2 rounded-xl font-semibold border border-[#7C5DFA] bg-[#F3F0FF] text-[#6D28D9] transition">3x Ultra HD</button>
+                                <button id="opt-scale-4" onclick="setCopyScale(4)" class="py-1.5 px-2 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition">4x Print HD</button>
+                            </div>
+                        </div>
+                        <label class="flex items-center justify-between pt-1 cursor-pointer">
+                            <span class="text-[11px] text-slate-600 dark:text-slate-300">Latar Belakang Putih</span>
+                            <input id="opt-white-bg" type="checkbox" checked onchange="updateCopyButtonLabel()" class="rounded text-[#7C5DFA] focus:ring-[#7C5DFA]" />
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export Dropdown -->
+            <div class="relative">
+                <button onclick="toggleExportMenu(event)" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span class="hidden sm:inline">Unduh</span>
+                </button>
+                <div id="export-menu" class="hidden absolute right-0 top-11 w-48 rounded-2xl bg-white dark:bg-slate-900 shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 p-1.5 z-50 text-xs">
+                    <button onclick="downloadDiagram('jpg', 3)" class="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                        <span>Unduh JPG (3x HD)</span>
+                        <span class="text-[10px] text-slate-400">98%</span>
+                    </button>
+                    <button onclick="downloadDiagram('png', 3)" class="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                        <span>Unduh PNG (3x HD)</span>
+                        <span class="text-[10px] text-slate-400">HD</span>
+                    </button>
+                    <button onclick="downloadDiagram('svg', 1)" class="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-medium flex items-center justify-between">
+                        <span>Unduh SVG Vektor</span>
+                        <span class="text-[10px] text-slate-400">.svg</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dark/Light Mode Toggle -->
+            <button onclick="toggleDarkMode()" title="Ganti Mode Gelap / Terang" class="p-2 rounded-xl border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition">
+                <svg id="icon-sun" class="w-4 h-4 hidden dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>
+                <svg id="icon-moon" class="w-4 h-4 block dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden relative">
+        <!-- Left Panel: DSL Code Editor -->
+        <section id="editor-panel" class="w-full md:w-[400px] lg:w-[440px] h-[44vh] md:h-full shrink-0 border-b md:border-b-0 md:border-r border-[#E5E7EB] dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col z-20">
+            <div class="px-4 py-2.5 border-b border-[#F1F3F5] dark:border-slate-800/80 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-[#7C5DFA]"></span>
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-100">Kode DSL Flowchart</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="copyDSLCode()" class="text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-[#7C5DFA] px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">Salin Kode</button>
+                    <button onclick="resetAllCanvas()" class="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-2 py-1 rounded-lg transition">Reset</button>
+                </div>
+            </div>
+
+            <!-- Sisipkan Simbol Cepat -->
+            <div class="px-4 py-2.5 border-b border-[#F1F3F5] dark:border-slate-800/80 bg-[#FAFAFC]/70 dark:bg-slate-900/40">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Sisipkan Simbol Cepat:</span>
+                    <button onclick="toggleSyntaxHelp()" class="text-[11px] font-semibold text-[#7C5DFA] hover:underline">Panduan Sintaks ?</button>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button onclick="insertSnippet('[Mulai]')" title="Start/End (Oval): titik mulai atau selesai" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-[#F3F0FF] text-[#6D28D9] border border-[#DDD6FE] hover:bg-[#EDE9FE] dark:bg-whimsical-500/20 dark:text-whimsical-200 dark:border-whimsical-500/30 transition">[Start/End]</button>
+                    <button onclick="insertSnippet('I: Input ')" title="Input/Output (Jajargenjang): pemasukan/keluaran data" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE] hover:bg-[#DBEAFE] dark:bg-blue-500/20 dark:text-blue-200 dark:border-blue-500/30 transition">I/O: Data</button>
+                    <button onclick="insertSnippet('P: ')" title="Process (Persegi Panjang): pengolahan data / perhitungan" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-white text-slate-700 border border-[#E5E7EB] hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 transition">P: Process</button>
+                    <button onclick="insertSnippet('D: ')" title="Decision (Belah Ketupat): keputusan / kondisi logika" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A] hover:bg-[#FEF3C7] dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-500/30 transition">D: Decision</button>
+                    <button onclick="insertSnippet('S: ')" title="Subprocess / Predefined Process: fungsi atau prosedur" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 dark:bg-teal-500/20 dark:text-teal-200 dark:border-teal-500/30 transition">S: Subproses</button>
+                    <button onclick="insertSnippet('M: ')" title="Manual Input (Trapesium): input manual keyboard/operator" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-500/30 transition">M: Manual</button>
+                    <button onclick="insertSnippet('DOC: ')" title="Document: cetak dokumen / laporan" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 dark:bg-rose-500/20 dark:text-rose-200 dark:border-rose-500/30 transition">DOC: Dokumen</button>
+                    <button onclick="insertSnippet('DB: ')" title="Database (Silinder): penyimpanan basis data" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-cyan-50 text-cyan-700 border border-cyan-200 hover:bg-cyan-100 dark:bg-cyan-500/20 dark:text-cyan-200 dark:border-cyan-500/30 transition">DB: Database</button>
+                    <button onclick="insertSnippet('C: A')" title="Connector (Lingkaran): penghubung titik halaman" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 transition">C: Titik</button>
+                    <button onclick="insertSnippet(' -> ')" title="Arrows: garis penghubung antar simbol" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 transition">→</button>
+                    <button onclick="insertSnippet(' --Ya--> ')" title="Arrows berlabel cabang kondisi" class="px-2 py-1 text-[11px] font-mono font-semibold rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/30 transition">--Ya→</button>
+                </div>
+            </div>
+
+            <!-- Box Panduan Sintaks -->
+            <div id="syntax-help-box" class="hidden px-4 py-3 bg-[#F8F7FF] dark:bg-whimsical-900/20 border-b border-[#EDE9FE] dark:border-whimsical-800/40 text-xs text-slate-700 dark:text-slate-300 space-y-1.5">
+                <div class="font-semibold text-[#6D28D9] dark:text-whimsical-200 flex items-center justify-between">
+                    <span>Daftar Lengkap Shape Flowchart &amp; Kontrol Kanvas</span>
+                    <button onclick="toggleSyntaxHelp()" class="text-[11px] text-slate-400 hover:text-slate-600">Tutup</button>
+                </div>
+                <ul class="space-y-1 text-[11px] leading-relaxed">
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">[Mulai]</code> / <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">[Selesai]</code> — <strong>Terminator (Oval)</strong></li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">I: ...</code> / <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">O: ...</code> — <strong>Input/Output (Jajargenjang)</strong></li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">P: ...</code> — <strong>Process (Persegi Panjang)</strong></li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">D: ...</code> — <strong>Decision (Belah Ketupat)</strong></li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">S: ...</code> — <strong>Subprocess / Fungsi</strong> (garis vertikal ganda)</li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">M: ...</code> — <strong>Manual Input</strong> (trapesium miring)</li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">DOC: ...</code> — <strong>Document / Laporan</strong> (tepi bawah bergelombang)</li>
+                    <li>• <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">DB: ...</code> — <strong>Database</strong> (silinder) &amp; <code class="px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">C: ...</code> — <strong>Connector</strong> (lingkaran)</li>
+                </ul>
+            </div>
+
+            <!-- Code Area with Line Numbers -->
+            <div class="flex-1 flex min-h-0 relative bg-white dark:bg-slate-900">
+                <div id="line-numbers" class="w-11 shrink-0 py-3.5 text-right pr-2.5 font-mono text-xs leading-6 text-slate-400 dark:text-slate-600 bg-[#FAFAFC] dark:bg-slate-900/60 border-r border-[#F1F3F5] dark:border-slate-800/80 overflow-hidden select-none"></div>
+                <textarea id="code-editor" spellcheck="false" oninput="handleCodeInput()" onscroll="syncLineNumbersScroll()" class="flex-1 w-full h-full py-3.5 px-3.5 font-mono text-xs sm:text-[13px] leading-6 bg-transparent text-slate-800 dark:text-slate-100 resize-none focus:outline-none" placeholder="Ketik kode flowchart di sini..."></textarea>
+            </div>
+
+            <!-- Status Bar -->
+            <div id="parser-status" class="px-4 py-2 border-t border-[#F1F3F5] dark:border-slate-800 bg-[#FAFAFC] dark:bg-slate-900/80 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span id="status-message">Siap • Seret simbol, resize kotak, atau geser label Ya/Tidak di kanvas</span>
+                <span id="node-edge-count" class="font-mono text-[10px] text-slate-400">0 simbol • 0 panah</span>
+            </div>
+        </section>
+
+        <!-- Right Panel: Interactive Flowchart Canvas -->
+        <section id="canvas-panel" class="flex-1 h-full relative overflow-hidden whimsical-dot-grid flex flex-col">
+            <!-- Floating Top Toolbar inside Canvas -->
+            <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none z-20">
+                <!-- Pointer Controls & Grid/Snap -->
+                <div class="pointer-events-auto inline-flex items-center gap-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-2 py-1.5 rounded-2xl shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 text-xs">
+                    <div title="Klik Kiri di area kosong untuk Multi-Select, Klik Kiri di simbol untuk memindahkan" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-semibold bg-[#F3F0FF] dark:bg-whimsical-500/20 text-[#6D28D9] dark:text-whimsical-200">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path></svg>
+                        <span>Klik Kiri: Select</span>
+                    </div>
+                    <div title="Tahan Klik Kanan (atau Spasi) di mana saja untuk menggeser kanvas" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"></path><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
+                        <span>Klik Kanan: Geser</span>
+                    </div>
+
+                    <div class="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+
+                    <button id="btn-toggle-grid" onclick="toggleCanvasGrid()" title="Tampilkan / Sembunyikan Titik Grid" class="px-2 py-1 rounded-xl font-medium text-[#6D28D9] dark:text-whimsical-300 bg-[#F3F0FF] dark:bg-whimsical-500/20 transition">
+                        Grid
+                    </button>
+                    <button id="btn-toggle-snap" onclick="toggleSnapGrid()" title="Kunci ke Grid 20px saat menggeser" class="px-2 py-1 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                        Snap 20px
+                    </button>
+                    <button onclick="resetLayoutPositions()" title="Kembalikan posisi &amp; ukuran otomatis" class="px-2 py-1 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                        Auto-Layout
+                    </button>
+                </div>
+
+                <!-- Diagram Theme Switcher -->
+                <div class="pointer-events-auto inline-flex items-center gap-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-2 py-1.5 rounded-2xl shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 text-xs">
+                    <span class="hidden sm:inline text-[11px] font-medium text-slate-400 px-1">Tema:</span>
+                    <button id="theme-btn-whimsical" onclick="setDiagramTheme('whimsical')" class="px-2.5 py-1 rounded-xl font-semibold bg-[#7C5DFA] text-white transition">Whimsical</button>
+                    <button id="theme-btn-pastel" onclick="setDiagramTheme('pastel')" class="px-2.5 py-1 rounded-xl font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Soft Pastel</button>
+                    <button id="theme-btn-mono" onclick="setDiagramTheme('mono')" class="px-2.5 py-1 rounded-xl font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">Print B&amp;W</button>
+                </div>
+            </div>
+
+            <!-- Contextual Toolbar: Single Selected Node -->
+            <div id="node-toolbar" class="hidden fixed z-40 flex-wrap items-center gap-1.5 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-2xl shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 text-xs max-w-[95vw]">
+                <div class="flex flex-wrap items-center gap-0.5 bg-[#FAFAFC] dark:bg-slate-800 p-1 rounded-xl border border-[#E5E7EB] dark:border-slate-700">
+                    <button onclick="changeSelectedNodeType('terminator')" data-shape-btn="terminator" title="Start/End (Oval)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Start/End</button>
+                    <button onclick="changeSelectedNodeType('io')" data-shape-btn="io" title="Input/Output (Jajargenjang)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">I/O</button>
+                    <button onclick="changeSelectedNodeType('process')" data-shape-btn="process" title="Process (Persegi Panjang)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Process</button>
+                    <button onclick="changeSelectedNodeType('decision')" data-shape-btn="decision" title="Decision (Belah Ketupat)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Decision</button>
+                    <button onclick="changeSelectedNodeType('subprocess')" data-shape-btn="subprocess" title="Subprocess (Predefined Process)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Sub</button>
+                    <button onclick="changeSelectedNodeType('manual')" data-shape-btn="manual" title="Manual Input (Trapesium)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Manual</button>
+                    <button onclick="changeSelectedNodeType('document')" data-shape-btn="document" title="Document (Laporan)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Doc</button>
+                    <button onclick="changeSelectedNodeType('database')" data-shape-btn="database" title="Database (Silinder)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">DB</button>
+                    <button onclick="changeSelectedNodeType('connector')" data-shape-btn="connector" title="Connector (Lingkaran)" class="shape-switch-btn px-1.5 py-1 text-[10px] font-mono font-bold rounded-lg transition">Conn</button>
+                </div>
+
+                <!-- Kontrol Dimensi Simbol -->
+                <div class="flex items-center gap-1 bg-[#FAFAFC] dark:bg-slate-800 px-1.5 py-1 rounded-xl border border-[#E5E7EB] dark:border-slate-700">
+                    <button onclick="adjustSelectedNodeDimension(-24, 0)" title="Kurangi Lebar" class="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">W−</button>
+                    <span id="node-dim-readout" class="font-mono text-[10px] text-slate-500 dark:text-slate-400 px-1">0×0</span>
+                    <button onclick="adjustSelectedNodeDimension(24, 0)" title="Tambah Lebar" class="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">W+</button>
+                    <button onclick="adjustSelectedNodeDimension(0, -14)" title="Kurangi Tinggi" class="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">H−</button>
+                    <button onclick="adjustSelectedNodeDimension(0, 14)" title="Tambah Tinggi" class="px-1.5 py-0.5 rounded hover:bg-white dark:hover:bg-slate-700 font-bold text-slate-600 dark:text-slate-300">H+</button>
+                    <button onclick="resetSelectedNodeDimension()" title="Auto-Fit ukuran &amp; wrap teks otomatis" class="px-1.5 py-0.5 rounded bg-[#F3F0FF] dark:bg-whimsical-500/20 text-[#6D28D9] dark:text-whimsical-200 font-semibold text-[10px]">Fit</button>
+                </div>
+
+                <button onclick="openInlineEditorForSelected()" title="Edit Teks Langsung (Klik Ganda Simbol)" class="px-2 py-1.5 rounded-xl font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition">✎ Edit</button>
+                <button onclick="straightenSelectedNode()" title="Luruskan sejajar dengan simbol terhubung" class="px-2 py-1.5 rounded-xl font-semibold text-[#6D28D9] dark:text-whimsical-300 hover:bg-[#F3F0FF] dark:hover:bg-whimsical-500/20 transition">Luruskan</button>
+                <button onclick="addChainedStepFromSelected()" title="Tambah langkah berikutnya" class="px-2 py-1.5 rounded-xl font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/20 hover:bg-emerald-100 transition">+ Langkah</button>
+                <button onclick="deleteSelectedNode()" title="Hapus simbol (Del)" class="px-2 py-1.5 rounded-xl font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">🗑</button>
+            </div>
+
+            <!-- Contextual Toolbar: Multi-Select (2+ Nodes) -->
+            <div id="multi-toolbar" class="hidden fixed z-40 items-center gap-1 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-2xl shadow-whim-float border border-[#7C5DFA]/40 text-xs">
+                <span id="multi-select-count" class="px-2 py-1 rounded-lg bg-[#F3F0FF] dark:bg-whimsical-500/20 text-[#6D28D9] dark:text-whimsical-200 font-bold">0 terpilih</span>
+                <button onclick="alignSelectedNodes('left')" title="Rata Kiri" class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">Rata Kiri</button>
+                <button onclick="alignSelectedNodes('center')" title="Rata Tengah Vertikal" class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">Rata Tengah</button>
+                <button onclick="alignSelectedNodes('right')" title="Rata Kanan" class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">Rata Kanan</button>
+                <button onclick="alignSelectedNodes('row')" title="Sejajarkan Baris Horizontal" class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">Sejajar Y</button>
+                <button onclick="distributeSelectedNodesVertically()" title="Rapikan Jarak Vertikal" class="px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 font-medium">Rapikan V</button>
+                <button onclick="deleteMultiSelectedNodes()" title="Hapus semua simbol terpilih" class="px-2 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold">Hapus</button>
+            </div>
+
+            <!-- Contextual Toolbar: Selected Edge -->
+            <div id="edge-toolbar" class="hidden fixed z-40 items-center gap-1.5 bg-white dark:bg-slate-900 px-2.5 py-1.5 rounded-2xl shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 text-xs">
+                <input id="edge-label-input" type="text" oninput="updateSelectedEdgeLabel(this.value)" placeholder="Label panah..." class="w-28 px-2.5 py-1 rounded-xl border border-[#E5E7EB] dark:border-slate-700 bg-[#FAFAFC] dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#7C5DFA]/40" />
+                <button onclick="updateSelectedEdgeLabel('Ya')" class="px-2 py-1 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200 font-semibold hover:bg-emerald-100 transition">Ya</button>
+                <button onclick="updateSelectedEdgeLabel('Tidak')" class="px-2 py-1 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200 font-semibold hover:bg-rose-100 transition">Tidak</button>
+                <button onclick="resetSelectedEdgeCurve()" title="Luruskan &amp; kembalikan posisi label panah" class="px-2 py-1 rounded-xl text-[#6D28D9] dark:text-whimsical-300 hover:bg-[#F3F0FF] dark:hover:bg-whimsical-500/20 font-semibold transition">Luruskan</button>
+                <button onclick="deleteSelectedEdge()" title="Hapus garis panah" class="px-2 py-1 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition">🗑</button>
+            </div>
+
+            <!-- Inline Node Text Editor Overlay -->
+            <textarea id="inline-node-editor" class="hidden fixed z-50 rounded-2xl border-2 border-[#7C5DFA] bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-sans text-sm font-semibold text-center p-2 shadow-whim-float resize-none focus:outline-none"></textarea>
+
+            <!-- Scrollable / Pannable SVG Viewport -->
+            <div id="canvas-viewport" class="w-full h-full overflow-auto relative">
+                <div id="canvas-stage" class="inline-flex items-start justify-center" style="padding: 320px 520px;">
+                    <svg id="flowchart-svg" xmlns="http://www.w3.org/2000/svg" class="overflow-visible select-none block"></svg>
+                </div>
+            </div>
+
+            <!-- Bottom Zoom & Help Hint -->
+            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none z-20">
+                <div class="hidden lg:inline-flex items-center gap-2 bg-white/90 dark:bg-slate-900/90 backdrop-blur px-3 py-1.5 rounded-xl border border-[#E5E7EB] dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 shadow-sm">
+                    <span>Klik Kiri = Select / Geser Simbol</span>
+                    <span>•</span>
+                    <span>Klik Kanan + Seret = Geser Kanvas</span>
+                    <span>•</span>
+                    <span>Scroll Wheel / Ctrl ± = Zoom</span>
+                </div>
+
+                <div class="ml-auto pointer-events-auto inline-flex items-center gap-1 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-2 py-1 rounded-2xl shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 text-xs">
+                    <button onclick="changeZoom(-0.12)" title="Perkecil (Ctrl+-)" class="w-7 h-7 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-bold flex items-center justify-center">−</button>
+                    <button onclick="setZoom(1)" title="Reset Zoom 100% (Ctrl+0)" id="zoom-readout" class="px-2 py-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-mono text-[11px] font-semibold">100%</button>
+                    <button onclick="changeZoom(0.12)" title="Perbesar (Ctrl+=)" class="w-7 h-7 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 font-bold flex items-center justify-center">+</button>
+                    <div class="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5"></div>
+                    <button onclick="fitZoomToViewport()" title="Sesuaikan seluruh flowchart ke layar" class="px-2 py-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-[#6D28D9] dark:text-whimsical-300">Fit</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast-banner" class="fixed bottom-14 left-1/2 -translate-x-1/2 px-4 py-2 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold shadow-whim-float opacity-0 pointer-events-none transition-all duration-200 z-50"></div>
+
+    <!-- Modal Fallback Copy Image (Jika Clipboard API diblokir browser/iframe) -->
+    <div id="copy-fallback-modal" class="hidden fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 shadow-whim-float border border-[#E5E7EB] dark:border-slate-700 space-y-3">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-sm text-slate-900 dark:text-white">Gambar HD Siap Disalin</h3>
+                <button onclick="closeCopyFallbackModal()" class="text-slate-400 hover:text-slate-600 text-sm font-bold px-2 py-1">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Klik kanan pada gambar di bawah lalu pilih <strong>Copy image</strong> (atau tekan tombol Salin di bawah).</p>
+            <div id="fallback-image-container" class="max-h-72 overflow-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-[#FAFAFC] dark:bg-slate-950 p-2 flex items-center justify-center"></div>
+            <div class="flex justify-end gap-2 pt-1">
+                <button onclick="copyFallbackImageViaSelection()" class="px-3.5 py-1.5 rounded-xl bg-[#7C5DFA] text-white text-xs font-semibold hover:bg-[#6D4AFF] transition">Salin Gambar</button>
+                <button onclick="closeCopyFallbackModal()" class="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =========================================================================
+        // 1. TEMPLATE STUDI KASUS & TEMA DIAGRAM
+        // =========================================================================
+        const PRESETS = {
+            string_length: `// Menghitung Panjang String
+[Mulai] -> init: P: panjang = 0
+init -> inp: I: Input string str
+inp -> cek_loop: D: str[panjang] != '\\0'?
+cek_loop --Ya--> inc: P: panjang = panjang + 1
+inc -> cek_loop
+cek_loop --Tidak--> out: O: Output "Jadi panjang stringnya adalah ", panjang
+out -> [Selesai]`,
+
+            avg_score: `// Menghitung Rata-Rata Nilai Mahasiswa
+[Mulai] -> init: P: total = 0, i = 1
+init -> cek_loop: D: i <= N?
+cek_loop --Ya--> inp: I: Input nilai[i]
+inp -> sum: P: total = total + nilai[i]
+sum -> inc: P: i = i + 1
+inc -> cek_loop
+cek_loop --Tidak--> avg: P: rata = total / N
+avg -> out: O: Output rata
+out -> [Selesai]`,
+
+            iot_flood: `// Sistem IoT Deteksi Banjir & Database Log
+[Mulai] -> baca: M: Baca sensor tinggi air (cm)
+baca -> cek_siaga: D: tinggi >= 100?
+cek_siaga --Ya--> alarm: S: Aktifkan Sirine & Pompa
+alarm -> log_db: DB: Simpan log bahaya
+log_db -> jeda: P: Tunggu 5 detik
+cek_siaga --Tidak--> aman: DOC: Cetak laporan status aman
+aman -> jeda
+jeda -> baca`,
+
+            auth_flow: `// Alur Login & Validasi Akun
+[Mulai] -> form: M: Input username & password
+form -> cek_db: DB: Cek data user di database
+cek_db -> cek_valid: D: Kredensial valid?
+cek_valid --Ya--> dash: O: Output "Login berhasil, buka dashboard"
+dash -> [Selesai]
+cek_valid --Tidak--> err: O: Output "Username atau password salah"
+err -> form`
+        };
+
+        const DIAGRAM_THEMES = {
+            whimsical: {
+                arrow: '#94A3B8',
+                loopArrow: '#7C5DFA',
+                text: '#0F172A',
+                subtext: '#475569',
+                guide: '#EC4899',
+                selection: '#7C5DFA',
+                shapes: {
+                    terminator: { fill: '#F3F0FF', stroke: '#7C5DFA', text: '#4C1D95' },
+                    io:         { fill: '#EFF6FF', stroke: '#2563EB', text: '#1E3A8A' },
+                    process:    { fill: '#FFFFFF', stroke: '#CBD5E1', text: '#0F172A' },
+                    decision:   { fill: '#FFFBEB', stroke: '#F59E0B', text: '#78350F' },
+                    subprocess: { fill: '#F0FDFA', stroke: '#0D9488', text: '#115E59' },
+                    manual:     { fill: '#EEF2FF', stroke: '#4F46E5', text: '#312E81' },
+                    document:   { fill: '#FFF1F2', stroke: '#E11D48', text: '#881337' },
+                    database:   { fill: '#ECFEFF', stroke: '#0891B2', text: '#164E63' },
+                    connector:  { fill: '#F8FAFC', stroke: '#475569', text: '#0F172A' },
+                }
+            },
+            pastel: {
+                arrow: '#64748B',
+                loopArrow: '#8B5CF6',
+                text: '#1E293B',
+                subtext: '#475569',
+                guide: '#F43F5E',
+                selection: '#6D28D9',
+                shapes: {
+                    terminator: { fill: '#EDE9FE', stroke: '#8B5CF6', text: '#5B21B6' },
+                    io:         { fill: '#E0F2FE', stroke: '#0284C7', text: '#0C4A6E' },
+                    process:    { fill: '#F0FDF4', stroke: '#22C55E', text: '#14532D' },
+                    decision:   { fill: '#FEF3C7', stroke: '#D97706', text: '#78350F' },
+                    subprocess: { fill: '#CCFBF1', stroke: '#0D9488', text: '#134E4A' },
+                    manual:     { fill: '#E0E7FF', stroke: '#4F46E5', text: '#312E81' },
+                    document:   { fill: '#FFE4E6', stroke: '#E11D48', text: '#881337' },
+                    database:   { fill: '#CFFAFE', stroke: '#0891B2', text: '#164E63' },
+                    connector:  { fill: '#F1F5F9', stroke: '#475569', text: '#1E293B' },
+                }
+            },
+            mono: {
+                arrow: '#111827',
+                loopArrow: '#111827',
+                text: '#111827',
+                subtext: '#374151',
+                guide: '#111827',
+                selection: '#111827',
+                shapes: {
+                    terminator: { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    io:         { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    process:    { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    decision:   { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    subprocess: { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    manual:     { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    document:   { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    database:   { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                    connector:  { fill: '#FFFFFF', stroke: '#111827', text: '#111827' },
+                }
+            }
+        };
+
+        // =========================================================================
+        // 2. STATE APLIKASI
+        // =========================================================================
+        const state = {
+            theme: 'whimsical',
+            zoom: 1,
+            spacePressed: false,
+            showGrid: true,
+            snapGrid: false,
+            editorVisible: true,
+            copyFormat: 'jpg', // 'jpg' | 'png'
+            copyScale: 3,      // 3 | 4
+            selectedNodeIds: new Set(),
+            selectedEdgeIndex: null,
+            // Penyimpanan kustomisasi manual per node ID & edge signature
+            customPositions: {},    // { [nodeId]: { x, y } }
+            customDimensions: {},   // { [nodeId]: { w, h } }
+            edgeOffsets: {},        // { [edgeKey]: { bendX, bendY, loopOffset, labelT } }
+            // Data hasil parse & layout terakhir
+            parsedGraph: { nodes: [], edges: [] },
+            layoutNodes: [],
+            layoutEdges: [],
+            svgMetrics: { width: 800, height: 600, minX: 0, minY: 0 },
+            // Undo / Redo snapshots
+            undoStack: [],
+            redoStack: [],
+            isApplyingHistory: false,
+            // Interaksi aktif
+            activeDrag: null,
+            activeGuides: []
+        };
+
+        const editorEl = document.getElementById('code-editor');
+        const lineNumbersEl = document.getElementById('line-numbers');
+        const svgEl = document.getElementById('flowchart-svg');
+        const viewportEl = document.getElementById('canvas-viewport');
+        const inlineEditorEl = document.getElementById('inline-node-editor');
+
+        // =========================================================================
+        // 3. PARSER DSL FLOWCHART (SESUAI FUNGSI SHAPE STANDAR)
+        // =========================================================================
+        function sanitizeNodeId(str) {
+            const cleaned = String(str || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9_]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+            return cleaned || 'node_' + Math.random().toString(36).slice(2, 7);
+        }
+
+        function inferShapeTypeFromLabel(label) {
+            const trimmed = String(label || '').trim();
+            if (/^(mulai|selesai|start|end|stop|finish)$/i.test(trimmed)) return 'terminator';
+            if (/^(input|output|cetak|tampil|tampilkan|baca|terima|print|scan|read|write)\b/i.test(trimmed) || /^".*",\s*\w+$/i.test(trimmed)) {
+                return 'io';
+            }
+            if (trimmed.endsWith('?') || /\b(apakah|jika|cek|valid|lebih besar|lebih kecil|sama dengan)\b/i.test(trimmed) || /(<=|>=|!=|==|<|>)/.test(trimmed)) {
+                return 'decision';
+            }
+            return 'process';
+        }
+
+        function mapPrefixToShapeType(prefixStr, label = '') {
+            switch (String(prefixStr || '').toUpperCase()) {
+                case 'T': return 'terminator';
+                case 'I':
+                case 'O': return 'io';
+                case 'D': return 'decision';
+                case 'P': return 'process';
+                case 'S': return 'subprocess';
+                case 'M': return 'manual';
+                case 'DOC': return 'document';
+                case 'DB': return 'database';
+                case 'C': return 'connector';
+                default: return inferShapeTypeFromLabel(label);
+            }
+        }
+
+        function parseNodeSpec(rawSpec) {
+            const text = String(rawSpec || '').trim();
+            if (!text) return null;
+
+            // 1. Format eksplisit dengan ID & tipe: id: T/I/O/P/D/S/M/DOC/DB/C: Label
+            const idTypedMatch = text.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(DOC|DB|[TIOPDSMC])\s*:\s*(.+)$/i);
+            if (idTypedMatch) {
+                const id = idTypedMatch[1].trim();
+                const type = mapPrefixToShapeType(idTypedMatch[2], idTypedMatch[3]);
+                return { id, type, label: idTypedMatch[3].trim(), isBareRef: false };
+            }
+
+            // 2. Format tanpa ID dengan tipe eksplisit: I: ..., O: ..., P: ..., D: ..., S: ..., M: ..., DOC: ..., DB: ..., C: ..., T: ...
+            const typedMatch = text.match(/^(DOC|DB|[TIOPDSMC])\s*:\s*(.+)$/i);
+            if (typedMatch) {
+                const label = typedMatch[2].trim();
+                const type = mapPrefixToShapeType(typedMatch[1], label);
+                return { id: sanitizeNodeId(label), type, label, isBareRef: false };
+            }
+
+            // 3. Format Terminator kurung siku: [Mulai] / [Selesai]
+            const termMatch = text.match(/^\[(.+)\]$/);
+            if (termMatch) {
+                const label = termMatch[1].trim();
+                return { id: sanitizeNodeId(label), type: 'terminator', label, isBareRef: false };
+            }
+
+            // 4. Format ID: Label (inferensi otomatis shape)
+            const colonIdMatch = text.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.+)$/);
+            if (colonIdMatch) {
+                const id = colonIdMatch[1].trim();
+                const label = colonIdMatch[2].trim();
+                return { id, type: inferShapeTypeFromLabel(label), label, isBareRef: false };
+            }
+
+            // 5. Referensi ID polos atau teks tanpa awalan (jangan timpa definisi simbol yang sudah ada)
+            return {
+                id: sanitizeNodeId(text),
+                type: inferShapeTypeFromLabel(text),
+                label: text,
+                isBareRef: true
+            };
+        }
+
+        function splitChainLine(line) {
+            // Memecah rantai token seperti A --Ya--> B -> C sambil menghormati kutip ganda/tunggal
+            const tokens = [];
+            let current = '';
+            let quote = null;
+            let i = 0;
+
+            while (i < line.length) {
+                const ch = line[i];
+                if ((ch === '"' || ch === "'") && line[i - 1] !== '\\') {
+                    if (!quote) quote = ch;
+                    else if (quote === ch) quote = null;
+                    current += ch;
+                    i++;
+                    continue;
+                }
+
+                if (!quote) {
+                    // Cek konektor berlabel: --Label-->
+                    const rest = line.slice(i);
+                    const labeledMatch = rest.match(/^\s*--([^-]+?)-->\s*/);
+                    if (labeledMatch) {
+                        if (current.trim()) tokens.push({ kind: 'node', value: current.trim() });
+                        tokens.push({ kind: 'edge', label: labeledMatch[1].trim() });
+                        current = '';
+                        i += labeledMatch[0].length;
+                        continue;
+                    }
+
+                    // Cek konektor biasa: -> atau -->
+                    const arrowMatch = rest.match(/^\s*-{1,2}>\s*/);
+                    if (arrowMatch) {
+                        if (current.trim()) tokens.push({ kind: 'node', value: current.trim() });
+                        tokens.push({ kind: 'edge', label: '' });
+                        current = '';
+                        i += arrowMatch[0].length;
+                        continue;
+                    }
+                }
+
+                current += ch;
+                i++;
+            }
+
+            if (current.trim()) tokens.push({ kind: 'node', value: current.trim() });
+            return tokens;
+        }
+
+        function parseFlowCode(codeText) {
+            const nodesMap = new Map();
+            const nodeOrder = [];
+            const edges = [];
+
+            const ensureNode = (spec) => {
+                if (!spec || !spec.id) return null;
+                if (!nodesMap.has(spec.id)) {
+                    nodesMap.set(spec.id, {
+                        id: spec.id,
+                        label: spec.label,
+                        type: spec.type
+                    });
+                    nodeOrder.push(spec.id);
+                } else if (!spec.isBareRef) {
+                    const existing = nodesMap.get(spec.id);
+                    if (spec.label) existing.label = spec.label;
+                    if (spec.type) existing.type = spec.type;
+                }
+                return nodesMap.get(spec.id);
+            };
+
+            const lines = String(codeText || '').split(/\r?\n/);
+            for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line || line.startsWith('//') || line.startsWith('#')) continue;
+
+                const tokens = splitChainLine(line);
+                if (tokens.length === 0) continue;
+
+                let prevNodeId = null;
+                let pendingEdgeLabel = null;
+
+                for (const tok of tokens) {
+                    if (tok.kind === 'edge') {
+                        pendingEdgeLabel = tok.label;
+                    } else if (tok.kind === 'node') {
+                        const spec = parseNodeSpec(tok.value);
+                        const nodeObj = ensureNode(spec);
+                        if (!nodeObj) continue;
+
+                        if (prevNodeId !== null && pendingEdgeLabel !== null) {
+                            edges.push({
+                                from: prevNodeId,
+                                to: nodeObj.id,
+                                label: pendingEdgeLabel
+                            });
+                            pendingEdgeLabel = null;
+                        }
+                        prevNodeId = nodeObj.id;
+                    }
+                }
+            }
+
+            return {
+                nodes: nodeOrder.map((id) => nodesMap.get(id)),
+                edges
+            };
+        }
+
+        // =========================================================================
+        // 4. AUTO TEXT WRAP, DIMENSI SHAPE & AUTO-LAYOUT
+        // =========================================================================
+        function wrapTextToLines(text, maxCharsPerLine = 24) {
+            const clean = String(text || '').trim();
+            if (!clean) return [''];
+
+            const explicitLines = clean.split(/\n/);
+            const wrapped = [];
+            const limit = Math.max(10, maxCharsPerLine);
+
+            for (const rawPart of explicitLines) {
+                const part = rawPart.trim();
+                if (!part) {
+                    wrapped.push('');
+                    continue;
+                }
+                const words = part.split(/\s+/);
+                let currentLine = '';
+
+                for (const word of words) {
+                    if (word.length > limit) {
+                        if (currentLine) {
+                            wrapped.push(currentLine);
+                            currentLine = '';
+                        }
+                        for (let idx = 0; idx < word.length; idx += limit) {
+                            const chunk = word.slice(idx, idx + limit);
+                            if (chunk.length === limit) wrapped.push(chunk);
+                            else currentLine = chunk;
+                        }
+                        continue;
+                    }
+
+                    const candidate = currentLine ? `${currentLine} ${word}` : word;
+                    if (candidate.length <= limit) {
+                        currentLine = candidate;
+                    } else {
+                        if (currentLine) wrapped.push(currentLine);
+                        currentLine = word;
+                    }
+                }
+                if (currentLine) wrapped.push(currentLine);
+            }
+
+            return wrapped.length ? wrapped : [clean];
+        }
+
+        function computeAutoSizeForNode(node) {
+            const type = node.type || 'process';
+            let maxWidth = 230;
+            let minWidth = 136;
+            let minHeight = 54;
+
+            if (type === 'connector') {
+                const diameter = Math.max(46, Math.min(72, String(node.label || '').length * 10 + 30));
+                return { w: diameter, h: diameter, lines: [String(node.label || '').slice(0, 6)] };
+            } else if (type === 'terminator') {
+                maxWidth = 190;
+                minWidth = 126;
+                minHeight = 48;
+            } else if (type === 'decision') {
+                maxWidth = 230;
+                minWidth = 152;
+                minHeight = 92;
+            } else if (type === 'io') {
+                maxWidth = 250;
+                minWidth = 164;
+                minHeight = 56;
+            } else if (type === 'subprocess') {
+                maxWidth = 246;
+                minWidth = 162;
+                minHeight = 56;
+            } else if (type === 'manual') {
+                maxWidth = 240;
+                minWidth = 156;
+                minHeight = 58;
+            } else if (type === 'document') {
+                maxWidth = 240;
+                minWidth = 156;
+                minHeight = 64;
+            } else if (type === 'database') {
+                maxWidth = 220;
+                minWidth = 144;
+                minHeight = 72;
+            } else if (type === 'process') {
+                maxWidth = 240;
+                minWidth = 152;
+                minHeight = 54;
+            }
+
+            const approxCharWidth = type === 'decision' ? 7.6 : 7.8;
+            const usableTextWidth = type === 'decision' ? maxWidth * 0.58 : maxWidth - 40;
+            const maxChars = Math.max(14, Math.floor(usableTextWidth / approxCharWidth));
+            const lines = wrapTextToLines(node.label, maxChars);
+
+            const longestLineLen = lines.reduce((m, l) => Math.max(m, l.length), 1);
+            const lineHeight = 18;
+            const textBlockH = lines.length * lineHeight;
+
+            const extraW = (type === 'io' || type === 'subprocess') ? 56 : 38;
+            const extraH = type === 'decision' ? 44 : (type === 'database' || type === 'document' ? 34 : 26);
+
+            let width = Math.min(maxWidth, Math.max(minWidth, longestLineLen * approxCharWidth + extraW));
+            let height = Math.max(minHeight, textBlockH + extraH);
+
+            if (type === 'decision') {
+                width = Math.max(width, height * 1.48);
+                height = Math.max(height, width * 0.56);
+            }
+
+            return {
+                w: Math.round(width),
+                h: Math.round(height),
+                lines
+            };
+        }
+
+        function computeLayout(graph) {
+            const { nodes, edges } = graph;
+            if (!nodes.length) {
+                return { layoutNodes: [], layoutEdges: [], metrics: { width: 600, height: 400, minX: 0, minY: 0 } };
+            }
+
+            const nodeMap = new Map();
+            nodes.forEach((n, index) => {
+                const autoSize = computeAutoSizeForNode(n);
+                const customDim = state.customDimensions[n.id];
+                const minW = n.type === 'connector' ? 42 : 96;
+                const minH = n.type === 'connector' ? 42 : 40;
+                const w = customDim ? Math.max(minW, Math.round(customDim.w)) : autoSize.w;
+                const h = customDim ? Math.max(minH, Math.round(customDim.h)) : autoSize.h;
+                const charLimit = n.type === 'connector'
+                    ? 6
+                    : Math.max(14, Math.floor(((n.type === 'decision' ? w * 0.58 : w - 40)) / 7.8));
+                const lines = wrapTextToLines(n.label, charLimit);
+
+                nodeMap.set(n.id, {
+                    ...n,
+                    index,
+                    w,
+                    h,
+                    lines,
+                    rank: 0,
+                    x: 0,
+                    y: 0,
+                    isCustomPos: Boolean(state.customPositions[n.id])
+                });
+            });
+
+            // 1. Deteksi back-edge (arus balik loop) menggunakan DFS agar header loop tidak terdorong ke bawah
+            const adj = new Map();
+            const inDegree = new Map();
+            nodes.forEach((n) => {
+                adj.set(n.id, []);
+                inDegree.set(n.id, 0);
+            });
+            edges.forEach((e, idx) => {
+                if (nodeMap.has(e.from) && nodeMap.has(e.to)) {
+                    adj.get(e.from).push({ to: e.to, idx });
+                    inDegree.set(e.to, inDegree.get(e.to) + 1);
+                }
+            });
+
+            const backEdgeIndices = new Set();
+            const dfsState = new Map(); // 0/undefined = unvisited, 1 = visiting (on stack), 2 = visited
+            const runDfs = (u) => {
+                dfsState.set(u, 1);
+                for (const { to: v, idx } of adj.get(u) || []) {
+                    const st = dfsState.get(v) || 0;
+                    if (st === 1) {
+                        backEdgeIndices.add(idx);
+                    } else if (st === 0) {
+                        runDfs(v);
+                    }
+                }
+                dfsState.set(u, 2);
+            };
+
+            const roots = nodes.filter((n) => inDegree.get(n.id) === 0);
+            const startNodes = roots.length ? roots : [nodes[0]];
+            startNodes.forEach((r) => {
+                if (!dfsState.get(r.id)) runDfs(r.id);
+            });
+            nodes.forEach((n) => {
+                if (!dfsState.get(n.id)) runDfs(n.id);
+            });
+
+            // 2. Hitung rank DAG hanya melalui forward/tree edge (bebas siklus loop)
+            const queue = startNodes.map((n) => n.id);
+            let safetyCounter = 0;
+            while (queue.length > 0 && safetyCounter < 2000) {
+                safetyCounter++;
+                const currId = queue.shift();
+                const currNode = nodeMap.get(currId);
+                for (const { to: nextId, idx } of adj.get(currId) || []) {
+                    if (backEdgeIndices.has(idx)) continue;
+                    const nextNode = nodeMap.get(nextId);
+                    if (!nextNode) continue;
+                    if (nextNode.rank < currNode.rank + 1) {
+                        nextNode.rank = currNode.rank + 1;
+                        queue.push(nextId);
+                    }
+                }
+            }
+
+            // 3. Klasifikasi sisi cabang tiap edge sebelum menghitung koordinat X
+            const decisionOutEdges = new Map();
+            edges.forEach((e, idx) => {
+                if (backEdgeIndices.has(idx)) return;
+                const fromNode = nodeMap.get(e.from);
+                const toNode = nodeMap.get(e.to);
+                if (!fromNode || !toNode) return;
+                if (fromNode.type === 'decision') {
+                    if (!decisionOutEdges.has(fromNode.id)) decisionOutEdges.set(fromNode.id, []);
+                    decisionOutEdges.get(fromNode.id).push(idx);
+                }
+            });
+
+            const edgeBranchMeta = new Map();
+            edges.forEach((e, idx) => {
+                const fromNode = nodeMap.get(e.from);
+                const toNode = nodeMap.get(e.to);
+                if (!fromNode || !toNode) return;
+                const isBack = backEdgeIndices.has(idx);
+                let branchSide = 'down';
+                if (!isBack && fromNode.type === 'decision') {
+                    const lbl = String(e.label || '').trim().toLowerCase();
+                    if (/^(tidak|no|false|salah|bukan)\b/.test(lbl)) {
+                        branchSide = 'right';
+                    } else if (/^(ya|yes|true|benar)\b/.test(lbl)) {
+                        const siblings = decisionOutEdges.get(fromNode.id) || [];
+                        const hasRightSibling = siblings.some((sIdx) => {
+                            const lbl2 = String(edges[sIdx].label || '').trim().toLowerCase();
+                            return /^(tidak|no|false|salah|bukan)\b/.test(lbl2);
+                        });
+                        branchSide = hasRightSibling ? 'down' : 'left';
+                    } else {
+                        const siblings = decisionOutEdges.get(fromNode.id) || [];
+                        const posInSib = siblings.indexOf(idx);
+                        branchSide = posInSib >= 1 ? 'right' : 'down';
+                    }
+                }
+                edgeBranchMeta.set(idx, { isBack, branchSide });
+            });
+
+            // 4. Kelompokkan per rank untuk menghitung koordinat Y & X kolom yang rapi
+            const ranks = new Map();
+            nodeMap.forEach((n) => {
+                if (!ranks.has(n.rank)) ranks.set(n.rank, []);
+                ranks.get(n.rank).push(n);
+            });
+
+            const sortedRanks = Array.from(ranks.keys()).sort((a, b) => a - b);
+            const yGap = 54;
+            const xGap = 72;
+            const baseCenterX = 420;
+            let cursorY = 64;
+
+            for (const r of sortedRanks) {
+                const group = ranks.get(r);
+                const maxH = group.reduce((m, item) => Math.max(m, item.h), 50);
+
+                // Tentukan target X otomatis berdasarkan induknya (kolom lurus ke bawah atau cabang kanan)
+                group.forEach((item, gIdx) => {
+                    if (state.customPositions[item.id]) {
+                        item.x = state.customPositions[item.id].x;
+                        item.y = state.customPositions[item.id].y;
+                        return;
+                    }
+
+                    item.y = cursorY + maxH / 2;
+
+                    // Cari edge masuk non-back-edge dari rank yang lebih kecil
+                    let parentEdgeIdx = -1;
+                    for (let idx = 0; idx < edges.length; idx++) {
+                        if (backEdgeIndices.has(idx)) continue;
+                        if (edges[idx].to === item.id) {
+                            const pNode = nodeMap.get(edges[idx].from);
+                            if (pNode && pNode.rank < item.rank) {
+                                parentEdgeIdx = idx;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (parentEdgeIdx !== -1) {
+                        const pEdge = edges[parentEdgeIdx];
+                        const pNode = nodeMap.get(pEdge.from);
+                        const meta = edgeBranchMeta.get(parentEdgeIdx) || { branchSide: 'down' };
+                        if (meta.branchSide === 'right') {
+                            item.x = pNode.x + pNode.w / 2 + item.w / 2 + xGap;
+                        } else if (meta.branchSide === 'left') {
+                            item.x = pNode.x - pNode.w / 2 - item.w / 2 - xGap;
+                        } else {
+                            item.x = pNode.x;
+                        }
+                    } else {
+                        const offset = (gIdx - (group.length - 1) / 2) * (item.w + xGap);
+                        item.x = baseCenterX + offset;
+                    }
+                });
+
+                // Cegah tumpang tindih horizontal antar-node otomatis pada rank yang sama
+                const autoGroup = group.filter((it) => !it.isCustomPos).sort((a, b) => a.x - b.x);
+                for (let i = 1; i < autoGroup.length; i++) {
+                    const prev = autoGroup[i - 1];
+                    const curr = autoGroup[i];
+                    const minDist = prev.w / 2 + curr.w / 2 + 56;
+                    if (curr.x - prev.x < minDist) {
+                        curr.x = prev.x + minDist;
+                    }
+                }
+
+                cursorY += maxH + yGap;
+            }
+
+            // 5. Bangun daftar layoutEdges dengan koordinat world yang konsisten (tanpa mutasi shiftX/Y)
+            const layoutEdges = [];
+            edges.forEach((e, idx) => {
+                const fromNode = nodeMap.get(e.from);
+                const toNode = nodeMap.get(e.to);
+                if (!fromNode || !toNode) return;
+
+                const meta = edgeBranchMeta.get(idx) || { isBack: false, branchSide: 'down' };
+                const isLoop = meta.isBack || toNode.y <= fromNode.y + 8;
+                const edgeKey = `${fromNode.id}->${toNode.id}#${idx}`;
+                const customEdge = state.edgeOffsets[edgeKey] || {};
+
+                layoutEdges.push({
+                    index: idx,
+                    key: edgeKey,
+                    from: fromNode,
+                    to: toNode,
+                    label: e.label || '',
+                    isLoop,
+                    branchSide: meta.branchSide,
+                    bendX: customEdge.bendX || 0,
+                    bendY: customEdge.bendY || 0,
+                    loopOffset: customEdge.loopOffset || 0,
+                    labelT: typeof customEdge.labelT === 'number' ? customEdge.labelT : 0.5
+                });
+            });
+
+            // 6. Hitung viewBox world stabil tanpa menggeser koordinat n.x / n.y agar drag tidak pernah melompat
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            nodeMap.forEach((n) => {
+                minX = Math.min(minX, n.x - n.w / 2);
+                maxX = Math.max(maxX, n.x + n.w / 2);
+                minY = Math.min(minY, n.y - n.h / 2);
+                maxY = Math.max(maxY, n.y + n.h / 2);
+            });
+
+            layoutEdges.forEach((le) => {
+                if (le.isLoop) {
+                    const leftMost = Math.min(le.from.x - le.from.w / 2, le.to.x - le.to.w / 2) - 54 - (le.loopOffset || 0);
+                    minX = Math.min(minX, leftMost);
+                }
+            });
+
+            const pad = 48;
+            const vbMinX = Math.min(0, Math.floor(minX - pad));
+            const vbMinY = Math.min(0, Math.floor(minY - pad));
+            const vbMaxX = Math.max(840, Math.ceil(maxX + pad));
+            const vbMaxY = Math.max(520, Math.ceil(maxY + pad));
+
+            return {
+                layoutNodes: Array.from(nodeMap.values()),
+                layoutEdges,
+                metrics: {
+                    width: vbMaxX - vbMinX,
+                    height: vbMaxY - vbMinY,
+                    minX: vbMinX,
+                    minY: vbMinY
+                }
+            };
+        }
+
+        // =========================================================================
+        // 5. ROUTING PANAH & POSISI LABEL SEPANJANG GARIS
+        // =========================================================================
+        function computeEdgeGeometry(edge) {
+            const { from, to, isLoop, branchSide, bendX, bendY, loopOffset } = edge;
+            const fLeft = from.x - from.w / 2;
+            const fRight = from.x + from.w / 2;
+            const fTop = from.y - from.h / 2;
+            const fBottom = from.y + from.h / 2;
+
+            const tLeft = to.x - to.w / 2;
+            const tRight = to.x + to.w / 2;
+            const tTop = to.y - to.h / 2;
+
+            if (isLoop) {
+                const startX = fLeft;
+                const startY = from.y + (bendY || 0);
+                const endX = tLeft;
+                const endY = to.y;
+                const channelX = Math.min(startX, endX) - 52 - (loopOffset || 0);
+                const r = 10;
+                const dirY = endY >= startY ? 1 : -1;
+
+                const d = [
+                    `M ${startX} ${startY}`,
+                    `L ${channelX + r} ${startY}`,
+                    `Q ${channelX} ${startY} ${channelX} ${startY + dirY * r}`,
+                    `L ${channelX} ${endY - dirY * r}`,
+                    `Q ${channelX} ${endY} ${channelX + r} ${endY}`,
+                    `L ${endX} ${endY}`
+                ].join(' ');
+
+                // Titik tengah saluran vertikal loop sebagai handle & sampel titik sepanjang jalur
+                const midY = (startY + endY) / 2;
+                const handle = { x: channelX, y: midY, mode: 'loop' };
+                const points = [
+                    { x: startX, y: startY },
+                    { x: channelX, y: startY },
+                    { x: channelX, y: endY },
+                    { x: endX, y: endY }
+                ];
+
+                return { d, points, handle, isBackEdge: true };
+            }
+
+            if (from.type === 'decision' && branchSide === 'right') {
+                const startX = fRight;
+                const startY = from.y;
+                const endX = to.x;
+                const endY = tTop;
+                const cornerX = endX + (bendX || 0);
+                const r = 10;
+
+                let d = '';
+                let points = [];
+                if (Math.abs(cornerX - startX) < 4) {
+                    d = `M ${startX} ${startY} L ${endX} ${endY}`;
+                    points = [{ x: startX, y: startY }, { x: endX, y: endY }];
+                } else if (cornerX > startX + r) {
+                    const dySign = endY >= startY ? 1 : -1;
+                    const safeR = Math.min(r, Math.abs(endY - startY) / 2);
+                    d = [
+                        `M ${startX} ${startY}`,
+                        `L ${cornerX - safeR} ${startY}`,
+                        `Q ${cornerX} ${startY} ${cornerX} ${startY + dySign * safeR}`,
+                        `L ${cornerX} ${endY}`
+                    ].join(' ');
+                    points = [
+                        { x: startX, y: startY },
+                        { x: cornerX, y: startY },
+                        { x: cornerX, y: endY }
+                    ];
+                } else {
+                    const midY = (startY + endY) / 2 + (bendY || 0);
+                    d = `M ${startX} ${startY} L ${startX + 24} ${startY} L ${startX + 24} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+                    points = [
+                        { x: startX, y: startY },
+                        { x: startX + 24, y: startY },
+                        { x: startX + 24, y: midY },
+                        { x: endX, y: midY },
+                        { x: endX, y: endY }
+                    ];
+                }
+
+                const handle = { x: cornerX, y: startY, mode: 'bendX' };
+                return { d, points, handle, isBackEdge: false };
+            }
+
+            // Alur ke bawah (normal / cabang bawah / cabang kiri)
+            const startX = from.x;
+            const startY = fBottom;
+            const endX = to.x;
+            const endY = tTop;
+
+            const dx = endX - startX;
+            const dy = endY - startY;
+
+            // Garis lurus vertikal bila sejajar dan tidak ada offset horizontal
+            if (Math.abs(dx + (bendX || 0)) < 3 && Math.abs(bendY || 0) < 3) {
+                const d = `M ${startX} ${startY} L ${endX} ${endY}`;
+                const points = [{ x: startX, y: startY }, { x: endX, y: endY }];
+                const handle = { x: (startX + endX) / 2, y: (startY + endY) / 2, mode: 'bendX' };
+                return { d, points, handle, isBackEdge: false };
+            }
+
+            const midY = startY + dy * 0.5 + (bendY || 0);
+            const targetX = endX + (bendX || 0);
+            const r = Math.min(10, Math.abs(targetX - startX) / 2, Math.max(4, Math.abs(midY - startY) / 2));
+
+            let d = '';
+            let points = [];
+            if (Math.abs(targetX - startX) < 3) {
+                d = `M ${startX} ${startY} L ${endX} ${endY}`;
+                points = [{ x: startX, y: startY }, { x: endX, y: endY }];
+            } else {
+                const dirX = targetX > startX ? 1 : -1;
+                const dirY1 = midY >= startY ? 1 : -1;
+                const dirY2 = endY >= midY ? 1 : -1;
+                d = [
+                    `M ${startX} ${startY}`,
+                    `L ${startX} ${midY - dirY1 * r}`,
+                    `Q ${startX} ${midY} ${startX + dirX * r} ${midY}`,
+                    `L ${targetX - dirX * r} ${midY}`,
+                    `Q ${targetX} ${midY} ${targetX} ${midY + dirY2 * r}`,
+                    `L ${endX} ${endY}`
+                ].join(' ');
+                points = [
+                    { x: startX, y: startY },
+                    { x: startX, y: midY },
+                    { x: targetX, y: midY },
+                    { x: endX, y: endY }
+                ];
+            }
+
+            const handle = { x: (startX + targetX) / 2, y: midY, mode: 'bendY' };
+            return { d, points, handle, isBackEdge: false };
+        }
+
+        function samplePointAlongPolyline(points, t) {
+            if (!points || !points.length) return { x: 0, y: 0 };
+            if (points.length === 1) return { ...points[0] };
+
+            const clampedT = Math.max(0.05, Math.min(0.95, typeof t === 'number' ? t : 0.5));
+            const segLengths = [];
+            let totalLen = 0;
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const dx = points[i + 1].x - points[i].x;
+                const dy = points[i + 1].y - points[i].y;
+                const len = Math.hypot(dx, dy);
+                segLengths.push(len);
+                totalLen += len;
+            }
+
+            if (totalLen === 0) return { ...points[0] };
+
+            const targetDist = totalLen * clampedT;
+            let acc = 0;
+
+            for (let i = 0; i < segLengths.length; i++) {
+                const len = segLengths[i];
+                if (acc + len >= targetDist || i === segLengths.length - 1) {
+                    const localRatio = len > 0 ? (targetDist - acc) / len : 0;
+                    return {
+                        x: points[i].x + (points[i + 1].x - points[i].x) * localRatio,
+                        y: points[i].y + (points[i + 1].y - points[i].y) * localRatio
+                    };
+                }
+                acc += len;
+            }
+
+            return { ...points[points.length - 1] };
+        }
+
+        function projectPointOntoPolylineT(points, px, py) {
+            if (!points || points.length < 2) return 0.5;
+
+            const segLengths = [];
+            let totalLen = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+                const len = Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+                segLengths.push(len);
+                totalLen += len;
+            }
+            if (totalLen === 0) return 0.5;
+
+            let bestDistSq = Infinity;
+            let bestDistAlong = totalLen * 0.5;
+            let accLen = 0;
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const ax = points[i].x, ay = points[i].y;
+                const bx = points[i + 1].x, by = points[i + 1].y;
+                const abx = bx - ax, aby = by - ay;
+                const abLenSq = abx * abx + aby * aby;
+                let s = 0;
+                if (abLenSq > 0) {
+                    s = Math.max(0, Math.min(1, ((px - ax) * abx + (py - ay) * aby) / abLenSq));
+                }
+                const projX = ax + abx * s;
+                const projY = ay + aby * s;
+                const distSq = (px - projX) ** 2 + (py - projY) ** 2;
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestDistAlong = accLen + segLengths[i] * s;
+                }
+                accLen += segLengths[i];
+            }
+
+            return Math.max(0.06, Math.min(0.94, bestDistAlong / totalLen));
+        }
+
+        // =========================================================================
+        // 6. SVG RENDERER (BENTUK SHAPE, PANAH, LABEL DRAGGABLE & RESIZE HANDLES)
+        // =========================================================================
+        function createSvgEl(tag, attrs = {}) {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            for (const [k, v] of Object.entries(attrs)) {
+                el.setAttribute(k, String(v));
+            }
+            return el;
+        }
+
+        function renderShapeSvg(node, palette) {
+            const g = createSvgEl('g');
+            const { x, y, w, h, type } = node;
+            const halfW = w / 2;
+            const halfH = h / 2;
+            const left = x - halfW;
+            const top = y - halfH;
+            const right = x + halfW;
+            const bottom = y + halfH;
+
+            const style = palette.shapes[type] || palette.shapes.process;
+            const isSelected = state.selectedNodeIds.has(node.id);
+            const strokeColor = isSelected ? palette.selection : style.stroke;
+            const strokeWidth = isSelected ? 2.6 : 2;
+
+            let textCenterY = y;
+
+            if (type === 'terminator') {
+                // Start / End: Oval / Pill
+                const rx = Math.min(halfH, 28);
+                g.appendChild(createSvgEl('rect', {
+                    x: left,
+                    y: top,
+                    width: w,
+                    height: h,
+                    rx,
+                    ry: rx,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+            } else if (type === 'io') {
+                // Input / Output: Jajargenjang (Parallelogram)
+                const skew = Math.min(18, w * 0.11);
+                const pts = [
+                    `${left + skew},${top}`,
+                    `${right},${top}`,
+                    `${right - skew},${bottom}`,
+                    `${left},${bottom}`
+                ].join(' ');
+                g.appendChild(createSvgEl('polygon', {
+                    points: pts,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth,
+                    'stroke-linejoin': 'round'
+                }));
+            } else if (type === 'decision') {
+                // Decision: Belah Ketupat (Diamond)
+                const pts = [
+                    `${x},${top}`,
+                    `${right},${y}`,
+                    `${x},${bottom}`,
+                    `${left},${y}`
+                ].join(' ');
+                g.appendChild(createSvgEl('polygon', {
+                    points: pts,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth,
+                    'stroke-linejoin': 'round'
+                }));
+            } else if (type === 'subprocess') {
+                // Subprocess / Predefined Process: Persegi panjang dengan 2 garis vertikal sisi
+                const inset = Math.min(14, w * 0.11);
+                g.appendChild(createSvgEl('rect', {
+                    x: left,
+                    y: top,
+                    width: w,
+                    height: h,
+                    rx: 6,
+                    ry: 6,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+                g.appendChild(createSvgEl('line', {
+                    x1: left + inset,
+                    y1: top,
+                    x2: left + inset,
+                    y2: bottom,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+                g.appendChild(createSvgEl('line', {
+                    x1: right - inset,
+                    y1: top,
+                    x2: right - inset,
+                    y2: bottom,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+            } else if (type === 'manual') {
+                // Manual Input: Trapesium miring di sisi atas
+                const dip = Math.min(14, h * 0.24);
+                const pts = [
+                    `${left},${top + dip}`,
+                    `${right},${top}`,
+                    `${right},${bottom}`,
+                    `${left},${bottom}`
+                ].join(' ');
+                g.appendChild(createSvgEl('polygon', {
+                    points: pts,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth,
+                    'stroke-linejoin': 'round'
+                }));
+                textCenterY = y + dip * 0.25;
+            } else if (type === 'document') {
+                // Document: Persegi panjang dengan tepi bawah bergelombang
+                const wave = Math.min(10, h * 0.16);
+                const baseBottom = bottom - wave * 0.7;
+                const d = [
+                    `M ${left} ${top}`,
+                    `L ${right} ${top}`,
+                    `L ${right} ${baseBottom}`,
+                    `Q ${x + halfW * 0.5} ${baseBottom - wave * 1.4} ${x} ${baseBottom}`,
+                    `Q ${x - halfW * 0.5} ${baseBottom + wave * 1.4} ${left} ${baseBottom}`,
+                    'Z'
+                ].join(' ');
+                g.appendChild(createSvgEl('path', {
+                    d,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth,
+                    'stroke-linejoin': 'round'
+                }));
+                textCenterY = y - wave * 0.25;
+            } else if (type === 'database') {
+                // Database: Silinder
+                const ry = Math.min(11, h * 0.17);
+                const bodyD = [
+                    `M ${left} ${top + ry}`,
+                    `L ${left} ${bottom - ry}`,
+                    `A ${halfW} ${ry} 0 0 0 ${right} ${bottom - ry}`,
+                    `L ${right} ${top + ry}`,
+                    `A ${halfW} ${ry} 0 0 0 ${left} ${top + ry}`,
+                    'Z'
+                ].join(' ');
+                g.appendChild(createSvgEl('path', {
+                    d: bodyD,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+                g.appendChild(createSvgEl('ellipse', {
+                    cx: x,
+                    cy: top + ry,
+                    rx: halfW,
+                    ry,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+                textCenterY = y + ry * 0.45;
+            } else if (type === 'connector') {
+                // Connector: Lingkaran kecil
+                const r = Math.min(halfW, halfH);
+                g.appendChild(createSvgEl('circle', {
+                    cx: x,
+                    cy: y,
+                    r,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+            } else {
+                // Process: Persegi Panjang (Rectangle)
+                g.appendChild(createSvgEl('rect', {
+                    x: left,
+                    y: top,
+                    width: w,
+                    height: h,
+                    rx: 10,
+                    ry: 10,
+                    fill: style.fill,
+                    stroke: strokeColor,
+                    'stroke-width': strokeWidth
+                }));
+            }
+
+            // Teks multi-baris di tengah simbol
+            const lineHeight = 18;
+            const lines = node.lines || [node.label];
+            const startTextY = textCenterY - ((lines.length - 1) * lineHeight) / 2;
+
+            const textEl = createSvgEl('text', {
+                x,
+                y: startTextY,
+                'text-anchor': 'middle',
+                'dominant-baseline': 'central',
+                fill: style.text,
+                'font-family': 'Inter, system-ui, sans-serif',
+                'font-size': '13',
+                'font-weight': (type === 'terminator' || type === 'connector') ? '700' : '600'
+            });
+
+            lines.forEach((lineText, idx) => {
+                const tspan = createSvgEl('tspan', {
+                    x,
+                    dy: idx === 0 ? '0' : `${lineHeight}`
+                });
+                tspan.textContent = lineText;
+                textEl.appendChild(tspan);
+            });
+
+            g.appendChild(textEl);
+
+            // Kotak seleksi & 8 Resize Handles jika dipilih satu simbol
+            if (isSelected && state.selectedNodeIds.size === 1) {
+                const outline = createSvgEl('rect', {
+                    class: 'selection-outline',
+                    x: left - 5,
+                    y: top - 5,
+                    width: w + 10,
+                    height: h + 10,
+                    rx: 12,
+                    fill: 'none',
+                    stroke: palette.selection,
+                    'stroke-width': '1.4',
+                    'stroke-dasharray': '4 3',
+                    'pointer-events': 'none'
+                });
+                g.appendChild(outline);
+
+                const handles = [
+                    { dir: 'nw', hx: left - 5, hy: top - 5, cursor: 'nwse-resize' },
+                    { dir: 'n',  hx: x,        hy: top - 5, cursor: 'ns-resize' },
+                    { dir: 'ne', hx: right + 5, hy: top - 5, cursor: 'nesw-resize' },
+                    { dir: 'e',  hx: right + 5, hy: y,       cursor: 'ew-resize' },
+                    { dir: 'se', hx: right + 5, hy: bottom + 5, cursor: 'nwse-resize' },
+                    { dir: 's',  hx: x,        hy: bottom + 5, cursor: 'ns-resize' },
+                    { dir: 'sw', hx: left - 5, hy: bottom + 5, cursor: 'nesw-resize' },
+                    { dir: 'w',  hx: left - 5, hy: y,       cursor: 'ew-resize' }
+                ];
+
+                handles.forEach((hd) => {
+                    const hRect = createSvgEl('rect', {
+                        class: 'resize-handle selection-outline',
+                        x: hd.hx - 4.5,
+                        y: hd.hy - 4.5,
+                        width: 9,
+                        height: 9,
+                        rx: 2.5,
+                        fill: '#FFFFFF',
+                        stroke: palette.selection,
+                        'stroke-width': '2',
+                        style: `cursor: ${hd.cursor}`
+                    });
+                    hRect.addEventListener('mousedown', (ev) => {
+                        ev.stopPropagation();
+                        beginResizeNode(ev, node, hd.dir);
+                    });
+                    g.appendChild(hRect);
+                });
+            } else if (isSelected && state.selectedNodeIds.size > 1) {
+                const multiOutline = createSvgEl('rect', {
+                    class: 'selection-outline',
+                    x: left - 4,
+                    y: top - 4,
+                    width: w + 8,
+                    height: h + 8,
+                    rx: 11,
+                    fill: 'none',
+                    stroke: palette.selection,
+                    'stroke-width': '2',
+                    'pointer-events': 'none'
+                });
+                g.appendChild(multiOutline);
+            }
+
+            return g;
+        }
+
+        function drawSVG() {
+            const prevMetrics = state.svgMetrics || { width: 840, height: 520, minX: 0, minY: 0 };
+            const palette = DIAGRAM_THEMES[state.theme] || DIAGRAM_THEMES.whimsical;
+            const layout = computeLayout(state.parsedGraph);
+            state.layoutNodes = layout.layoutNodes;
+            state.layoutEdges = layout.layoutEdges;
+            state.svgMetrics = layout.metrics;
+
+            const scaledW = Math.round(layout.metrics.width * state.zoom);
+            const scaledH = Math.round(layout.metrics.height * state.zoom);
+
+            svgEl.setAttribute('width', scaledW);
+            svgEl.setAttribute('height', scaledH);
+            svgEl.setAttribute('viewBox', `${layout.metrics.minX} ${layout.metrics.minY} ${layout.metrics.width} ${layout.metrics.height}`);
+            svgEl.innerHTML = '';
+
+            // Kompensasi scroll apabila viewBox meluas ke kiri/atas saat user menyeret simbol melewati tepi 0
+            if (layout.metrics.minX !== prevMetrics.minX) {
+                viewportEl.scrollLeft += (prevMetrics.minX - layout.metrics.minX) * state.zoom;
+            }
+            if (layout.metrics.minY !== prevMetrics.minY) {
+                viewportEl.scrollTop += (prevMetrics.minY - layout.metrics.minY) * state.zoom;
+            }
+
+            // Definisi marker ujung panah
+            const defs = createSvgEl('defs');
+            const makeMarker = (id, color) => {
+                const m = createSvgEl('marker', {
+                    id,
+                    viewBox: '0 0 10 10',
+                    refX: '8.5',
+                    refY: '5',
+                    markerWidth: '6.5',
+                    markerHeight: '6.5',
+                    orient: 'auto-start-reverse'
+                });
+                m.appendChild(createSvgEl('polygon', { points: '0,1.5 10,5 0,8.5', fill: color }));
+                return m;
+            };
+            defs.appendChild(makeMarker('fc-arrow-normal', palette.arrow));
+            defs.appendChild(makeMarker('fc-arrow-loop', palette.loopArrow));
+            defs.appendChild(makeMarker('fc-arrow-selected', palette.selection));
+            svgEl.appendChild(defs);
+
+            // Layer 1: Garis Panah & Titik Kontrol Belokan
+            const edgesLayer = createSvgEl('g', { id: 'layer-edges' });
+            layout.layoutEdges.forEach((edge) => {
+                const geom = computeEdgeGeometry(edge);
+                edge._geom = geom;
+
+                const isSelected = state.selectedEdgeIndex === edge.index;
+                const strokeCol = isSelected
+                    ? palette.selection
+                    : (edge.isLoop ? palette.loopArrow : palette.arrow);
+                const markerId = isSelected
+                    ? 'url(#fc-arrow-selected)'
+                    : (edge.isLoop ? 'url(#fc-arrow-loop)' : 'url(#fc-arrow-normal)');
+
+                // Hit-area lebar tak terlihat agar garis mudah diklik
+                const hitPath = createSvgEl('path', {
+                    d: geom.d,
+                    fill: 'none',
+                    stroke: 'transparent',
+                    'stroke-width': '14',
+                    style: 'cursor: pointer'
+                });
+                hitPath.addEventListener('mousedown', (ev) => {
+                    if (ev.button !== 0 || state.spacePressed) return;
+                    ev.stopPropagation();
+                    selectEdge(edge.index);
+                });
+                edgesLayer.appendChild(hitPath);
+
+                // Garis panah utama
+                edgesLayer.appendChild(createSvgEl('path', {
+                    d: geom.d,
+                    fill: 'none',
+                    stroke: strokeCol,
+                    'stroke-width': isSelected ? '2.6' : '2.1',
+                    'stroke-linecap': 'round',
+                    'stroke-linejoin': 'round',
+                    'marker-end': markerId,
+                    'pointer-events': 'none'
+                }));
+
+                // Handle pengatur belokan garis saat garis dipilih
+                if (isSelected) {
+                    const hGroup = createSvgEl('g', {
+                        class: 'edge-handle-group selection-outline',
+                        transform: `translate(${geom.handle.x}, ${geom.handle.y})`
+                    });
+                    hGroup.appendChild(createSvgEl('circle', {
+                        r: '14',
+                        fill: 'transparent'
+                    }));
+                    hGroup.appendChild(createSvgEl('circle', {
+                        class: 'edge-handle-visual',
+                        r: '6',
+                        fill: '#FFFFFF',
+                        stroke: palette.selection,
+                        'stroke-width': '2.5'
+                    }));
+                    hGroup.appendChild(createSvgEl('circle', {
+                        class: 'edge-handle-visual',
+                        r: '2.2',
+                        fill: palette.selection,
+                        'pointer-events': 'none'
+                    }));
+                    hGroup.addEventListener('mousedown', (ev) => {
+                        ev.stopPropagation();
+                        beginDragEdgeHandle(ev, edge);
+                    });
+                    edgesLayer.appendChild(hGroup);
+                }
+            });
+            svgEl.appendChild(edgesLayer);
+
+            // Layer 2: Edge Labels ("Ya", "Tidak", dsb.) yang bisa digeser sepanjang garis
+            const labelsLayer = createSvgEl('g', { id: 'layer-edge-labels' });
+            layout.layoutEdges.forEach((edge) => {
+                if (!edge.label) return;
+                const geom = edge._geom || computeEdgeGeometry(edge);
+                const pt = samplePointAlongPolyline(geom.points, edge.labelT);
+
+                const lblLower = edge.label.trim().toLowerCase();
+                let pillFill = '#FFFFFF';
+                let pillStroke = '#CBD5E1';
+                let pillText = '#334155';
+
+                if (/^(ya|yes|true|benar)\b/.test(lblLower)) {
+                    pillFill = '#ECFDF5';
+                    pillStroke = '#6EE7B7';
+                    pillText = '#047857';
+                } else if (/^(tidak|no|false|salah|bukan)\b/.test(lblLower)) {
+                    pillFill = '#FFF1F2';
+                    pillStroke = '#FDA4AF';
+                    pillText = '#BE123C';
+                }
+
+                if (state.selectedEdgeIndex === edge.index) {
+                    pillStroke = palette.selection;
+                }
+
+                const approxPillW = Math.max(38, edge.label.length * 7.5 + 18);
+                const pillH = 22;
+
+                const lblGroup = createSvgEl('g', {
+                    class: 'edge-label-group',
+                    transform: `translate(${pt.x}, ${pt.y})`
+                });
+
+                const rect = createSvgEl('rect', {
+                    x: -approxPillW / 2,
+                    y: -pillH / 2,
+                    width: approxPillW,
+                    height: pillH,
+                    rx: pillH / 2,
+                    fill: pillFill,
+                    stroke: pillStroke,
+                    'stroke-width': '1.5'
+                });
+
+                const txt = createSvgEl('text', {
+                    x: 0,
+                    y: 0.5,
+                    'text-anchor': 'middle',
+                    'dominant-baseline': 'central',
+                    fill: pillText,
+                    'font-family': 'Inter, system-ui, sans-serif',
+                    'font-size': '11',
+                    'font-weight': '700',
+                    'pointer-events': 'none'
+                });
+                txt.textContent = edge.label;
+
+                lblGroup.appendChild(rect);
+                lblGroup.appendChild(txt);
+
+                lblGroup.addEventListener('mousedown', (ev) => {
+                    ev.stopPropagation();
+                    selectEdge(edge.index);
+                    beginDragEdgeLabelAlongPath(ev, edge);
+                });
+
+                labelsLayer.appendChild(lblGroup);
+            });
+            svgEl.appendChild(labelsLayer);
+
+            // Layer 3: Nodes (Simbol Flowchart)
+            const nodesLayer = createSvgEl('g', { id: 'layer-nodes' });
+            layout.layoutNodes.forEach((node) => {
+                const isBeingDragged = state.activeDrag && state.activeDrag.mode === 'nodes' && state.selectedNodeIds.has(node.id);
+                const nGroup = createSvgEl('g', {
+                    class: `fc-node-group ${isBeingDragged ? 'dragging-node' : ''}`,
+                    'data-node-id': node.id
+                });
+                nGroup.appendChild(renderShapeSvg(node, palette));
+
+                nGroup.addEventListener('mousedown', (ev) => {
+                    if (state.spacePressed) return;
+                    if (ev.target.classList.contains('resize-handle')) return;
+                    ev.stopPropagation();
+                    beginNodeInteraction(ev, node);
+                });
+
+                nGroup.addEventListener('dblclick', (ev) => {
+                    ev.stopPropagation();
+                    openInlineNodeEditor(node);
+                });
+
+                nodesLayer.appendChild(nGroup);
+            });
+            svgEl.appendChild(nodesLayer);
+
+            // Layer 4: Smart Alignment Guides & Marquee Selection Box
+            const guidesLayer = createSvgEl('g', { id: 'layer-guides', class: 'selection-outline pointer-events-none' });
+            state.activeGuides.forEach((g) => {
+                const line = createSvgEl('line', {
+                    x1: g.x1,
+                    y1: g.y1,
+                    x2: g.x2,
+                    y2: g.y2,
+                    stroke: palette.guide,
+                    'stroke-width': '1.2',
+                    'stroke-dasharray': '4 3'
+                });
+                guidesLayer.appendChild(line);
+            });
+
+            if (state.activeDrag && state.activeDrag.mode === 'marquee') {
+                const m = state.activeDrag;
+                const mx = Math.min(m.startSvgX, m.currSvgX);
+                const my = Math.min(m.startSvgY, m.currSvgY);
+                const mw = Math.abs(m.currSvgX - m.startSvgX);
+                const mh = Math.abs(m.currSvgY - m.startSvgY);
+                const box = createSvgEl('rect', {
+                    x: mx,
+                    y: my,
+                    width: mw,
+                    height: mh,
+                    fill: 'rgba(124, 93, 250, 0.12)',
+                    stroke: '#7C5DFA',
+                    'stroke-width': '1.5',
+                    'stroke-dasharray': '4 3'
+                });
+                guidesLayer.appendChild(box);
+            }
+            svgEl.appendChild(guidesLayer);
+
+            updateStatusAndToolbars();
+        }
+
+        // =========================================================================
+        // 7. INTERAKSI KANVAS (DRAG, MULTI-SELECT, RESIZE, LABEL DRAG, INLINE EDIT)
+        // =========================================================================
+        function clientToSvgPoint(clientX, clientY) {
+            const ctm = svgEl.getScreenCTM();
+            if (ctm) {
+                const pt = svgEl.createSVGPoint();
+                pt.x = clientX;
+                pt.y = clientY;
+                const svgPt = pt.matrixTransform(ctm.inverse());
+                return { x: svgPt.x, y: svgPt.y };
+            }
+            const rect = svgEl.getBoundingClientRect();
+            return {
+                x: (clientX - rect.left) / state.zoom,
+                y: (clientY - rect.top) / state.zoom
+            };
+        }
+
+        function svgToClientPoint(svgX, svgY) {
+            const ctm = svgEl.getScreenCTM();
+            if (ctm) {
+                const pt = svgEl.createSVGPoint();
+                pt.x = svgX;
+                pt.y = svgY;
+                const screenPt = pt.matrixTransform(ctm);
+                return { x: screenPt.x, y: screenPt.y };
+            }
+            const rect = svgEl.getBoundingClientRect();
+            return {
+                x: rect.left + svgX * state.zoom,
+                y: rect.top + svgY * state.zoom
+            };
+        }
+
+        function centerDiagramInViewport() {
+            const vpW = viewportEl.clientWidth;
+            const vpH = viewportEl.clientHeight;
+            const stagePadLeft = 520;
+            const stagePadTop = 320;
+            const m = state.svgMetrics || { width: 840, height: 520, minX: 0, minY: 0 };
+
+            if (state.layoutNodes && state.layoutNodes.length) {
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                state.layoutNodes.forEach((n) => {
+                    minX = Math.min(minX, n.x - n.w / 2);
+                    maxX = Math.max(maxX, n.x + n.w / 2);
+                    minY = Math.min(minY, n.y - n.h / 2);
+                    maxY = Math.max(maxY, n.y + n.h / 2);
+                });
+                const centerWorldX = (minX + maxX) / 2;
+                const centerWorldY = (minY + maxY) / 2;
+                const diagH = (maxY - minY) * state.zoom;
+                const screenCenterX = stagePadLeft + (centerWorldX - m.minX) * state.zoom;
+                const screenTopY = stagePadTop + (minY - m.minY) * state.zoom;
+                const screenCenterY = stagePadTop + (centerWorldY - m.minY) * state.zoom;
+
+                viewportEl.scrollLeft = Math.max(0, Math.round(screenCenterX - vpW / 2));
+                if (diagH < vpH - 120) {
+                    viewportEl.scrollTop = Math.max(0, Math.round(screenCenterY - vpH / 2));
+                } else {
+                    viewportEl.scrollTop = Math.max(0, Math.round(screenTopY - 72));
+                }
+                return;
+            }
+
+            const diagW = m.width * state.zoom;
+            viewportEl.scrollLeft = Math.max(0, Math.round(stagePadLeft + diagW / 2 - vpW / 2));
+            viewportEl.scrollTop = Math.max(0, stagePadTop - 72);
+        }
+
+        function snapValue(val) {
+            return state.snapGrid ? Math.round(val / 20) * 20 : val;
+        }
+
+        function beginNodeInteraction(ev, node) {
+            if (ev.button !== 0) return;
+            closeInlineNodeEditor(true);
+            state.selectedEdgeIndex = null;
+
+            const isShift = ev.shiftKey;
+            if (isShift) {
+                if (state.selectedNodeIds.has(node.id)) {
+                    state.selectedNodeIds.delete(node.id);
+                } else {
+                    state.selectedNodeIds.add(node.id);
+                }
+            } else if (!state.selectedNodeIds.has(node.id)) {
+                state.selectedNodeIds = new Set([node.id]);
+            }
+
+            if (state.selectedNodeIds.size === 0) {
+                drawSVG();
+                return;
+            }
+
+            const startSvg = clientToSvgPoint(ev.clientX, ev.clientY);
+            const initialPositions = {};
+            state.layoutNodes.forEach((n) => {
+                if (state.selectedNodeIds.has(n.id)) {
+                    initialPositions[n.id] = { x: n.x, y: n.y };
+                }
+            });
+
+            state.activeDrag = {
+                mode: 'nodes',
+                anchorNodeId: node.id,
+                startClientX: ev.clientX,
+                startClientY: ev.clientY,
+                startSvgX: startSvg.x,
+                startSvgY: startSvg.y,
+                initialPositions,
+                moved: false,
+                historySaved: false
+            };
+
+            drawSVG();
+        }
+
+        function beginResizeNode(ev, node, dir) {
+            if (ev.button !== 0) return;
+            closeInlineNodeEditor(true);
+            state.selectedNodeIds = new Set([node.id]);
+            state.selectedEdgeIndex = null;
+            pushHistorySnapshot();
+
+            const startSvg = clientToSvgPoint(ev.clientX, ev.clientY);
+            state.activeDrag = {
+                mode: 'resize',
+                nodeId: node.id,
+                dir,
+                startSvgX: startSvg.x,
+                startSvgY: startSvg.y,
+                startW: node.w,
+                startH: node.h,
+                startX: node.x,
+                startY: node.y
+            };
+        }
+
+        function beginDragEdgeHandle(ev, edge) {
+            if (ev.button !== 0) return;
+            const startSvg = clientToSvgPoint(ev.clientX, ev.clientY);
+            const currentCustom = state.edgeOffsets[edge.key] || {};
+            state.activeDrag = {
+                mode: 'edge-handle',
+                edgeKey: edge.key,
+                handleMode: edge._geom?.handle?.mode || 'bendX',
+                startClientX: ev.clientX,
+                startClientY: ev.clientY,
+                startSvgX: startSvg.x,
+                startSvgY: startSvg.y,
+                origBendX: currentCustom.bendX || 0,
+                origBendY: currentCustom.bendY || 0,
+                origLoopOffset: currentCustom.loopOffset || 0,
+                moved: false,
+                historySaved: false
+            };
+        }
+
+        function beginDragEdgeLabelAlongPath(ev, edge) {
+            if (ev.button !== 0) return;
+            const startSvg = clientToSvgPoint(ev.clientX, ev.clientY);
+            state.activeDrag = {
+                mode: 'edge-label',
+                edgeKey: edge.key,
+                points: edge._geom?.points || [],
+                startClientX: ev.clientX,
+                startClientY: ev.clientY,
+                startSvgX: startSvg.x,
+                startSvgY: startSvg.y,
+                moved: false,
+                historySaved: false
+            };
+        }
+
+        function selectEdge(index) {
+            closeInlineNodeEditor(true);
+            state.selectedNodeIds.clear();
+            state.selectedEdgeIndex = index;
+            drawSVG();
+        }
+
+        function setupCanvasEvents() {
+            // Nonaktifkan menu klik kanan browser di area kanvas agar Klik Kanan murni untuk Hand Pan
+            viewportEl.addEventListener('contextmenu', (ev) => {
+                ev.preventDefault();
+            });
+
+            // Pemisahan Kontrol Kanvas:
+            // - Klik Kanan (button === 2) atau Middle-Click / Spasi: Free-Hand Panning di mana saja (termasuk di atas simbol)
+            // - Klik Kiri (button === 0) pada area kosong: Marquee Multi-Selection Box akurat sesuai ujung kursor
+            viewportEl.addEventListener('mousedown', (ev) => {
+                if (ev.button === 2 || ev.button === 1 || (ev.button === 0 && state.spacePressed)) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    viewportEl.classList.add('is-panning');
+                    state.activeDrag = {
+                        mode: 'pan',
+                        startClientX: ev.clientX,
+                        startClientY: ev.clientY,
+                        startScrollLeft: viewportEl.scrollLeft,
+                        startScrollTop: viewportEl.scrollTop
+                    };
+                    updateStatusAndToolbars();
+                    return;
+                }
+
+                if (ev.button !== 0) return;
+                closeInlineNodeEditor(true);
+
+                const pt = clientToSvgPoint(ev.clientX, ev.clientY);
+                state.activeDrag = {
+                    mode: 'marquee',
+                    startClientX: ev.clientX,
+                    startClientY: ev.clientY,
+                    startSvgX: pt.x,
+                    startSvgY: pt.y,
+                    currSvgX: pt.x,
+                    currSvgY: pt.y,
+                    additive: ev.shiftKey,
+                    moved: false
+                };
+                if (!ev.shiftKey) {
+                    state.selectedNodeIds.clear();
+                    state.selectedEdgeIndex = null;
+                }
+                drawSVG();
+            });
+
+            // Zoom in / out dengan scroll wheel (berpusat tepat di posisi kursor)
+            viewportEl.addEventListener('wheel', (ev) => {
+                ev.preventDefault();
+                const zoomFactor = ev.deltaY < 0 ? 1.1 : 0.9;
+                setZoom(state.zoom * zoomFactor, ev.clientX, ev.clientY);
+            }, { passive: false });
+
+            // Dukungan pinch-to-zoom 2 jari pada layar sentuh / trackpad
+            let initialPinchDist = null;
+            let initialPinchZoom = 1;
+            viewportEl.addEventListener('touchstart', (ev) => {
+                if (ev.touches.length === 2) {
+                    const t1 = ev.touches[0], t2 = ev.touches[1];
+                    initialPinchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                    initialPinchZoom = state.zoom;
+                }
+            }, { passive: true });
+
+            viewportEl.addEventListener('touchmove', (ev) => {
+                if (ev.touches.length === 2 && initialPinchDist) {
+                    ev.preventDefault();
+                    const t1 = ev.touches[0], t2 = ev.touches[1];
+                    const currDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                    const midX = (t1.clientX + t2.clientX) / 2;
+                    const midY = (t1.clientY + t2.clientY) / 2;
+                    setZoom(initialPinchZoom * (currDist / initialPinchDist), midX, midY);
+                }
+            }, { passive: false });
+
+            viewportEl.addEventListener('touchend', () => {
+                initialPinchDist = null;
+            });
+
+            viewportEl.addEventListener('scroll', () => {
+                if (!state.activeDrag || !state.activeDrag.moved) updateStatusAndToolbars();
+            });
+
+            window.addEventListener('mousemove', (ev) => {
+                if (!state.activeDrag) return;
+                const drag = state.activeDrag;
+
+                if (drag.mode === 'pan') {
+                    const dx = ev.clientX - drag.startClientX;
+                    const dy = ev.clientY - drag.startClientY;
+                    viewportEl.scrollLeft = drag.startScrollLeft - dx;
+                    viewportEl.scrollTop = drag.startScrollTop - dy;
+                    return;
+                }
+
+                const screenDist = Math.hypot(
+                    ev.clientX - (drag.startClientX ?? ev.clientX),
+                    ev.clientY - (drag.startClientY ?? ev.clientY)
+                );
+                const pt = clientToSvgPoint(ev.clientX, ev.clientY);
+
+                if (drag.mode === 'nodes') {
+                    // Deadzone 5px: klik kiri biasa hanya men-select shape tanpa menggeser posisinya
+                    if (!drag.moved) {
+                        if (screenDist < 5) return;
+                        drag.moved = true;
+                        if (!drag.historySaved) {
+                            pushHistorySnapshot();
+                            drag.historySaved = true;
+                        }
+                    }
+
+                    let dx = pt.x - drag.startSvgX;
+                    let dy = pt.y - drag.startSvgY;
+
+                    if (ev.shiftKey) {
+                        if (Math.abs(dx) > Math.abs(dy)) dy = 0;
+                        else dx = 0;
+                    }
+
+                    const anchorStart = drag.initialPositions[drag.anchorNodeId];
+                    let targetX = anchorStart.x + dx;
+                    let targetY = anchorStart.y + dy;
+
+                    // Smart magnetic alignment guides terhadap node lain yang tidak sedang digeser
+                    state.activeGuides = [];
+                    const magnetThreshold = 10;
+                    const others = state.layoutNodes.filter((n) => !state.selectedNodeIds.has(n.id));
+
+                    for (const other of others) {
+                        if (Math.abs(targetX - other.x) <= magnetThreshold) {
+                            targetX = other.x;
+                            state.activeGuides.push({
+                                x1: other.x,
+                                y1: Math.min(targetY, other.y) - 40,
+                                x2: other.x,
+                                y2: Math.max(targetY, other.y) + 40
+                            });
+                        }
+                        if (Math.abs(targetY - other.y) <= magnetThreshold) {
+                            targetY = other.y;
+                            state.activeGuides.push({
+                                x1: Math.min(targetX, other.x) - 60,
+                                y1: other.y,
+                                x2: Math.max(targetX, other.x) + 60,
+                                y2: other.y
+                            });
+                        }
+                    }
+
+                    targetX = snapValue(targetX);
+                    targetY = snapValue(targetY);
+
+                    const appliedDx = targetX - anchorStart.x;
+                    const appliedDy = targetY - anchorStart.y;
+
+                    for (const [id, initPos] of Object.entries(drag.initialPositions)) {
+                        state.customPositions[id] = {
+                            x: Math.round(initPos.x + appliedDx),
+                            y: Math.round(initPos.y + appliedDy)
+                        };
+                    }
+
+                    drawSVG();
+                } else if (drag.mode === 'resize') {
+                    const dx = pt.x - drag.startSvgX;
+                    const dy = pt.y - drag.startSvgY;
+                    const sym = ev.altKey ? 2 : 1;
+
+                    let newW = drag.startW;
+                    let newH = drag.startH;
+                    let newX = drag.startX;
+                    let newY = drag.startY;
+
+                    if (drag.dir.includes('e')) {
+                        newW = Math.max(52, drag.startW + dx * sym);
+                        if (!ev.altKey) newX = drag.startX + (newW - drag.startW) / 2;
+                    }
+                    if (drag.dir.includes('w')) {
+                        newW = Math.max(52, drag.startW - dx * sym);
+                        if (!ev.altKey) newX = drag.startX - (newW - drag.startW) / 2;
+                    }
+                    if (drag.dir.includes('s')) {
+                        newH = Math.max(42, drag.startH + dy * sym);
+                        if (!ev.altKey) newY = drag.startY + (newH - drag.startH) / 2;
+                    }
+                    if (drag.dir.includes('n')) {
+                        newH = Math.max(42, drag.startH - dy * sym);
+                        if (!ev.altKey) newY = drag.startY - (newH - drag.startH) / 2;
+                    }
+
+                    state.customDimensions[drag.nodeId] = {
+                        w: Math.round(snapValue(newW)),
+                        h: Math.round(snapValue(newH))
+                    };
+                    state.customPositions[drag.nodeId] = {
+                        x: Math.round(snapValue(newX)),
+                        y: Math.round(snapValue(newY))
+                    };
+
+                    drawSVG();
+                } else if (drag.mode === 'edge-handle') {
+                    if (!drag.moved) {
+                        if (screenDist < 4) return;
+                        drag.moved = true;
+                        if (!drag.historySaved) {
+                            pushHistorySnapshot();
+                            drag.historySaved = true;
+                        }
+                    }
+                    const dx = pt.x - drag.startSvgX;
+                    const dy = pt.y - drag.startSvgY;
+                    const curr = state.edgeOffsets[drag.edgeKey] || {};
+
+                    if (drag.handleMode === 'loop') {
+                        curr.loopOffset = Math.max(-20, Math.round(drag.origLoopOffset - dx));
+                    } else if (drag.handleMode === 'bendX') {
+                        curr.bendX = Math.round(drag.origBendX + dx);
+                    } else {
+                        curr.bendY = Math.round(drag.origBendY + dy);
+                    }
+
+                    state.edgeOffsets[drag.edgeKey] = curr;
+                    drawSVG();
+                } else if (drag.mode === 'edge-label') {
+                    if (!drag.moved) {
+                        if (screenDist < 4) return;
+                        drag.moved = true;
+                        if (!drag.historySaved) {
+                            pushHistorySnapshot();
+                            drag.historySaved = true;
+                        }
+                    }
+                    const t = projectPointOntoPolylineT(drag.points, pt.x, pt.y);
+                    const curr = state.edgeOffsets[drag.edgeKey] || {};
+                    curr.labelT = t;
+                    state.edgeOffsets[drag.edgeKey] = curr;
+                    drawSVG();
+                } else if (drag.mode === 'marquee') {
+                    if (!drag.moved) {
+                        if (screenDist < 4) return;
+                        drag.moved = true;
+                    }
+                    drag.currSvgX = pt.x;
+                    drag.currSvgY = pt.y;
+                    if (Math.hypot(pt.x - drag.startSvgX, pt.y - drag.startSvgY) > 3) {
+                        drag.moved = true;
+                    }
+
+                    const minX = Math.min(drag.startSvgX, drag.currSvgX);
+                    const maxX = Math.max(drag.startSvgX, drag.currSvgX);
+                    const minY = Math.min(drag.startSvgY, drag.currSvgY);
+                    const maxY = Math.max(drag.startSvgY, drag.currSvgY);
+
+                    const nextSel = drag.additive ? new Set(state.selectedNodeIds) : new Set();
+                    state.layoutNodes.forEach((n) => {
+                        const nLeft = n.x - n.w / 2;
+                        const nRight = n.x + n.w / 2;
+                        const nTop = n.y - n.h / 2;
+                        const nBottom = n.y + n.h / 2;
+                        if (nRight >= minX && nLeft <= maxX && nBottom >= minY && nTop <= maxY) {
+                            nextSel.add(n.id);
+                        }
+                    });
+                    state.selectedNodeIds = nextSel;
+                    drawSVG();
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (!state.activeDrag) return;
+                viewportEl.classList.remove('is-panning');
+                // Jika klik simbol dalam kelompok tanpa menggeser (dan tanpa Shift), fokuskan ke simbol tersebut
+                if (state.activeDrag.mode === 'nodes' && !state.activeDrag.moved && state.selectedNodeIds.size > 1) {
+                    state.selectedNodeIds = new Set([state.activeDrag.anchorNodeId]);
+                }
+                state.activeDrag = null;
+                state.activeGuides = [];
+                drawSVG();
+            });
+        }
+
+        // =========================================================================
+        // 8. INLINE TEXT EDITING & SINKRONISASI DUA ARAH KE KODE DSL
+        // =========================================================================
+        function openInlineNodeEditor(node) {
+            if (!node) return;
+            const topLeft = svgToClientPoint(node.x - node.w / 2, node.y - node.h / 2);
+            const bottomRight = svgToClientPoint(node.x + node.w / 2, node.y + node.h / 2);
+            const screenW = Math.max(130, bottomRight.x - topLeft.x);
+            const screenH = Math.max(48, bottomRight.y - topLeft.y);
+
+            inlineEditorEl.dataset.nodeId = node.id;
+            inlineEditorEl.value = node.label;
+            inlineEditorEl.style.left = `${Math.round(topLeft.x)}px`;
+            inlineEditorEl.style.top = `${Math.round(topLeft.y)}px`;
+            inlineEditorEl.style.width = `${Math.round(screenW)}px`;
+            inlineEditorEl.style.height = `${Math.round(screenH)}px`;
+            inlineEditorEl.classList.remove('hidden');
+            inlineEditorEl.focus();
+            inlineEditorEl.select();
+        }
+
+        function openInlineEditorForSelected() {
+            if (state.selectedNodeIds.size !== 1) return;
+            const id = Array.from(state.selectedNodeIds)[0];
+            const node = state.layoutNodes.find((n) => n.id === id);
+            if (node) openInlineNodeEditor(node);
+        }
+
+        function closeInlineNodeEditor(commit) {
+            if (inlineEditorEl.classList.contains('hidden')) return;
+            const nodeId = inlineEditorEl.dataset.nodeId;
+            const newLabel = inlineEditorEl.value.replace(/\r?\n/g, ' ').trim();
+            inlineEditorEl.classList.add('hidden');
+            inlineEditorEl.dataset.nodeId = '';
+
+            if (!commit || !nodeId || !newLabel) return;
+            const target = state.parsedGraph.nodes.find((n) => n.id === nodeId);
+            if (!target || target.label === newLabel) return;
+
+            pushHistorySnapshot();
+            updateNodeLabelInCode(nodeId, newLabel);
+        }
+
+        inlineEditorEl.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault();
+                closeInlineNodeEditor(true);
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                closeInlineNodeEditor(false);
+            }
+        });
+
+        function formatNodeSpecToken(nodeId, type, label) {
+            if (type === 'terminator') {
+                if (nodeId === sanitizeNodeId(label)) return `[${label}]`;
+                return `${nodeId}: [${label}]`;
+            }
+            const prefixMap = {
+                io: 'I',
+                process: 'P',
+                decision: 'D',
+                terminator: 'T',
+                subprocess: 'S',
+                manual: 'M',
+                document: 'DOC',
+                database: 'DB',
+                connector: 'C'
+            };
+            const pfx = prefixMap[type] || 'P';
+            if (nodeId === sanitizeNodeId(label)) {
+                return `${pfx}: ${label}`;
+            }
+            return `${nodeId}: ${pfx}: ${label}`;
+        }
+
+        function replaceNodeTokenInCode(nodeId, updaterFn) {
+            const lines = editorEl.value.split(/\r?\n/);
+            let replaced = false;
+            let hasExplicitDef = false;
+
+            for (const rawLine of lines) {
+                const trimmed = rawLine.trim();
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+                for (const tok of splitChainLine(trimmed)) {
+                    if (tok.kind === 'node') {
+                        const sp = parseNodeSpec(tok.value);
+                        if (sp && sp.id === nodeId && !sp.isBareRef) {
+                            hasExplicitDef = true;
+                        }
+                    }
+                }
+            }
+
+            const newLines = lines.map((rawLine) => {
+                const trimmed = rawLine.trim();
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) return rawLine;
+
+                const tokens = splitChainLine(trimmed);
+                if (!tokens.length) return rawLine;
+
+                let changedInLine = false;
+                const rebuilt = tokens.map((tok) => {
+                    if (tok.kind === 'edge') {
+                        return tok.label ? ` --${tok.label}--> ` : ' -> ';
+                    }
+                    const spec = parseNodeSpec(tok.value);
+                    if (spec && spec.id === nodeId) {
+                        if (spec.isBareRef && hasExplicitDef) {
+                            return tok.value;
+                        }
+                        replaced = true;
+                        changedInLine = true;
+                        const updated = updaterFn(spec);
+                        return formatNodeSpecToken(updated.id, updated.type, updated.label);
+                    }
+                    return tok.value;
+                });
+
+                return changedInLine ? rebuilt.join('') : rawLine;
+            });
+
+            if (replaced) {
+                editorEl.value = newLines.join('\n');
+                syncAndRenderFromCode();
+            }
+        }
+
+        function updateNodeLabelInCode(nodeId, newLabel) {
+            replaceNodeTokenInCode(nodeId, (spec) => ({ ...spec, label: newLabel }));
+        }
+
+        function changeSelectedNodeType(newType) {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            pushHistorySnapshot();
+            delete state.customDimensions[nodeId];
+            replaceNodeTokenInCode(nodeId, (spec) => ({ ...spec, type: newType }));
+        }
+
+        function adjustSelectedNodeDimension(dw, dh) {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            const node = state.layoutNodes.find((n) => n.id === nodeId);
+            if (!node) return;
+
+            pushHistorySnapshot();
+            state.customDimensions[nodeId] = {
+                w: Math.max(100, Math.round(node.w + dw)),
+                h: Math.max(42, Math.round(node.h + dh))
+            };
+            drawSVG();
+        }
+
+        function resetSelectedNodeDimension() {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            pushHistorySnapshot();
+            delete state.customDimensions[nodeId];
+            drawSVG();
+        }
+
+        function straightenSelectedNode() {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            const node = state.layoutNodes.find((n) => n.id === nodeId);
+            if (!node) return;
+
+            const parentEdge = state.layoutEdges.find((e) => e.to.id === nodeId && !e.isLoop);
+            const targetX = parentEdge ? parentEdge.from.x : node.x;
+
+            pushHistorySnapshot();
+            state.customPositions[nodeId] = { x: Math.round(targetX), y: Math.round(node.y) };
+            state.layoutEdges.forEach((e) => {
+                if (e.from.id === nodeId || e.to.id === nodeId) {
+                    state.edgeOffsets[e.key] = { bendX: 0, bendY: 0, loopOffset: e.loopOffset || 0, labelT: 0.5 };
+                }
+            });
+            drawSVG();
+        }
+
+        function addChainedStepFromSelected() {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            pushHistorySnapshot();
+            const stepId = 'langkah_' + Math.random().toString(36).slice(2, 6);
+            editorEl.value = `${editorEl.value.trimEnd()}\n${nodeId} -> ${stepId}: P: Proses baru`;
+            state.selectedNodeIds = new Set([stepId]);
+            syncAndRenderFromCode();
+        }
+
+        function deleteNodeFromCode(nodeId) {
+            const lines = editorEl.value.split(/\r?\n/);
+            const filtered = [];
+
+            for (const rawLine of lines) {
+                const trimmed = rawLine.trim();
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
+                    filtered.push(rawLine);
+                    continue;
+                }
+                const tokens = splitChainLine(trimmed);
+                if (!tokens.length) {
+                    filtered.push(rawLine);
+                    continue;
+                }
+
+                // Jika baris hanya berisi deklarasi node tersebut tanpa panah, hapus barisnya
+                const nodeTokens = tokens.filter((t) => t.kind === 'node');
+                if (nodeTokens.length === 1) {
+                    const sp = parseNodeSpec(nodeTokens[0].value);
+                    if (sp && sp.id === nodeId) continue;
+                }
+
+                // Hapus segmen yang terhubung ke nodeId
+                const cleanTokens = [];
+                let skipNextEdge = false;
+                for (let i = 0; i < tokens.length; i++) {
+                    const tok = tokens[i];
+                    if (tok.kind === 'node') {
+                        const sp = parseNodeSpec(tok.value);
+                        if (sp && sp.id === nodeId) {
+                            if (cleanTokens.length && cleanTokens[cleanTokens.length - 1].kind === 'edge') {
+                                cleanTokens.pop();
+                            } else {
+                                skipNextEdge = true;
+                            }
+                            continue;
+                        }
+                        cleanTokens.push(tok);
+                    } else {
+                        if (skipNextEdge) {
+                            skipNextEdge = false;
+                            continue;
+                        }
+                        cleanTokens.push(tok);
+                    }
+                }
+
+                if (cleanTokens.length && cleanTokens[cleanTokens.length - 1].kind === 'edge') {
+                    cleanTokens.pop();
+                }
+
+                const joined = cleanTokens.map((t) => t.kind === 'edge' ? (t.label ? ` --${t.label}--> ` : ' -> ') : t.value).join('').trim();
+                if (joined) filtered.push(joined);
+            }
+
+            delete state.customPositions[nodeId];
+            delete state.customDimensions[nodeId];
+            editorEl.value = filtered.join('\n');
+        }
+
+        function deleteSelectedNode() {
+            if (state.selectedNodeIds.size !== 1) return;
+            const nodeId = Array.from(state.selectedNodeIds)[0];
+            pushHistorySnapshot();
+            deleteNodeFromCode(nodeId);
+            state.selectedNodeIds.clear();
+            syncAndRenderFromCode();
+        }
+
+        function deleteMultiSelectedNodes() {
+            if (!state.selectedNodeIds.size) return;
+            pushHistorySnapshot();
+            const ids = Array.from(state.selectedNodeIds);
+            ids.forEach((id) => deleteNodeFromCode(id));
+            state.selectedNodeIds.clear();
+            syncAndRenderFromCode();
+        }
+
+        function alignSelectedNodes(mode) {
+            if (state.selectedNodeIds.size < 2) return;
+            const selected = state.layoutNodes.filter((n) => state.selectedNodeIds.has(n.id));
+            if (selected.length < 2) return;
+
+            pushHistorySnapshot();
+
+            if (mode === 'left') {
+                const minLeft = Math.min(...selected.map((n) => n.x - n.w / 2));
+                selected.forEach((n) => {
+                    state.customPositions[n.id] = { x: Math.round(minLeft + n.w / 2), y: Math.round(n.y) };
+                });
+            } else if (mode === 'center') {
+                const avgX = selected.reduce((s, n) => s + n.x, 0) / selected.length;
+                selected.forEach((n) => {
+                    state.customPositions[n.id] = { x: Math.round(avgX), y: Math.round(n.y) };
+                });
+            } else if (mode === 'right') {
+                const maxRight = Math.max(...selected.map((n) => n.x + n.w / 2));
+                selected.forEach((n) => {
+                    state.customPositions[n.id] = { x: Math.round(maxRight - n.w / 2), y: Math.round(n.y) };
+                });
+            } else if (mode === 'row') {
+                const avgY = selected.reduce((s, n) => s + n.y, 0) / selected.length;
+                selected.forEach((n) => {
+                    state.customPositions[n.id] = { x: Math.round(n.x), y: Math.round(avgY) };
+                });
+            }
+
+            drawSVG();
+        }
+
+        function distributeSelectedNodesVertically() {
+            if (state.selectedNodeIds.size < 3) {
+                showToast('Pilih minimal 3 simbol untuk merapikan jarak vertikal');
+                return;
+            }
+            const selected = state.layoutNodes
+                .filter((n) => state.selectedNodeIds.has(n.id))
+                .sort((a, b) => a.y - b.y);
+
+            pushHistorySnapshot();
+            const firstY = selected[0].y;
+            const lastY = selected[selected.length - 1].y;
+            const step = (lastY - firstY) / (selected.length - 1);
+
+            selected.forEach((n, idx) => {
+                state.customPositions[n.id] = {
+                    x: Math.round(n.x),
+                    y: Math.round(firstY + step * idx)
+                };
+            });
+            drawSVG();
+        }
+
+        function updateSelectedEdgeLabel(newLabel) {
+            if (state.selectedEdgeIndex === null) return;
+            const edge = state.layoutEdges[state.selectedEdgeIndex];
+            if (!edge) return;
+
+            const lines = editorEl.value.split(/\r?\n/);
+            let matchCounter = 0;
+
+            const updatedLines = lines.map((rawLine) => {
+                const trimmed = rawLine.trim();
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) return rawLine;
+
+                const tokens = splitChainLine(trimmed);
+                let lineChanged = false;
+                const rebuilt = tokens.map((tok) => {
+                    if (tok.kind === 'edge') {
+                        const isTarget = matchCounter === edge.index;
+                        matchCounter++;
+                        if (isTarget) {
+                            lineChanged = true;
+                            const cleanLbl = String(newLabel || '').trim();
+                            return cleanLbl ? ` --${cleanLbl}--> ` : ' -> ';
+                        }
+                        return tok.label ? ` --${tok.label}--> ` : ' -> ';
+                    }
+                    return tok.value;
+                });
+                return lineChanged ? rebuilt.join('') : rawLine;
+            });
+
+            editorEl.value = updatedLines.join('\n');
+            syncAndRenderFromCode();
+        }
+
+        function resetSelectedEdgeCurve() {
+            if (state.selectedEdgeIndex === null) return;
+            const edge = state.layoutEdges[state.selectedEdgeIndex];
+            if (!edge) return;
+            pushHistorySnapshot();
+            delete state.edgeOffsets[edge.key];
+            drawSVG();
+        }
+
+        function deleteSelectedEdge() {
+            if (state.selectedEdgeIndex === null) return;
+            const targetIdx = state.selectedEdgeIndex;
+            pushHistorySnapshot();
+
+            const lines = editorEl.value.split(/\r?\n/);
+            let edgeCounter = 0;
+            const nextLines = [];
+
+            for (const rawLine of lines) {
+                const trimmed = rawLine.trim();
+                if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
+                    nextLines.push(rawLine);
+                    continue;
+                }
+
+                const tokens = splitChainLine(trimmed);
+                const hasEdgeInLine = tokens.some((t) => t.kind === 'edge');
+                if (!hasEdgeInLine) {
+                    nextLines.push(rawLine);
+                    continue;
+                }
+
+                const parts = [];
+                for (const tok of tokens) {
+                    if (tok.kind === 'edge') {
+                        if (edgeCounter === targetIdx) {
+                            parts.push({ kind: 'BREAK' });
+                        } else {
+                            parts.push(tok);
+                        }
+                        edgeCounter++;
+                    } else {
+                        parts.push(tok);
+                    }
+                }
+
+                // Pisahkan segmen jika terputus oleh BREAK
+                let seg = [];
+                for (const p of parts) {
+                    if (p.kind === 'BREAK') {
+                        if (seg.length) nextLines.push(seg.map((s) => s.kind === 'edge' ? (s.label ? ` --${s.label}--> ` : ' -> ') : s.value).join('').trim());
+                        seg = [];
+                    } else {
+                        seg.push(p);
+                    }
+                }
+                if (seg.length) nextLines.push(seg.map((s) => s.kind === 'edge' ? (s.label ? ` --${s.label}--> ` : ' -> ') : s.value).join('').trim());
+            }
+
+            state.selectedEdgeIndex = null;
+            editorEl.value = nextLines.join('\n');
+            syncAndRenderFromCode();
+        }
+
+        // =========================================================================
+        // 9. TOOLBAR KONTEKSTUAL, UNDO/REDO & SHORTCUT KEYBOARD
+        // =========================================================================
+        function positionToolbarAroundBox(toolbarEl, boxTopLeft, boxBottomRight, canvasRect) {
+            toolbarEl.classList.remove('hidden');
+            toolbarEl.classList.add('flex');
+
+            const tbW = toolbarEl.offsetWidth || 360;
+            const tbH = toolbarEl.offsetHeight || 44;
+            const gap = 12;
+            const safeTopLimit = canvasRect.top + 58;
+            const safeBottomLimit = window.innerHeight - 16;
+
+            // Default: pusatkan horizontal terhadap simbol & taruh di ATAS simbol
+            let left = (boxTopLeft.x + boxBottomRight.x) / 2 - tbW / 2;
+            let top = boxTopLeft.y - tbH - gap;
+
+            // Jika ruang di atas tidak cukup (agar tidak terdorong turun menutupi simbol), pindahkan ke BAWAH simbol
+            if (top < safeTopLimit) {
+                const belowTop = boxBottomRight.y + gap;
+                if (belowTop + tbH <= safeBottomLimit) {
+                    top = belowTop;
+                } else {
+                    // Jika bawah juga penuh, taruh di samping kanan atau kiri simbol
+                    top = Math.max(safeTopLimit, Math.min(safeBottomLimit - tbH, (boxTopLeft.y + boxBottomRight.y) / 2 - tbH / 2));
+                    if (boxBottomRight.x + gap + tbW <= window.innerWidth - 12) {
+                        left = boxBottomRight.x + gap;
+                    } else if (boxTopLeft.x - gap - tbW >= canvasRect.left + 12) {
+                        left = boxTopLeft.x - gap - tbW;
+                    }
+                }
+            }
+
+            left = Math.max(canvasRect.left + 12, Math.min(window.innerWidth - tbW - 12, left));
+            toolbarEl.style.left = `${Math.round(left)}px`;
+            toolbarEl.style.top = `${Math.round(top)}px`;
+        }
+
+        function updateStatusAndToolbars() {
+            const nCount = state.parsedGraph.nodes.length;
+            const eCount = state.parsedGraph.edges.length;
+            document.getElementById('node-edge-count').textContent = `${nCount} simbol • ${eCount} panah`;
+
+            const nodeToolbar = document.getElementById('node-toolbar');
+            const multiToolbar = document.getElementById('multi-toolbar');
+            const edgeToolbar = document.getElementById('edge-toolbar');
+
+            nodeToolbar.classList.add('hidden');
+            nodeToolbar.classList.remove('flex');
+            multiToolbar.classList.add('hidden');
+            multiToolbar.classList.remove('flex');
+            edgeToolbar.classList.add('hidden');
+            edgeToolbar.classList.remove('flex');
+
+            // Sembunyikan toolbar mengambang saat user sedang aktif menggeser/seleksi agar pandangan tidak terhalang
+            if (state.activeDrag && state.activeDrag.moved) return;
+
+            const canvasRect = viewportEl.getBoundingClientRect();
+
+            if (state.selectedNodeIds.size === 1) {
+                const nodeId = Array.from(state.selectedNodeIds)[0];
+                const node = state.layoutNodes.find((n) => n.id === nodeId);
+                if (node) {
+                    document.getElementById('node-dim-readout').textContent = `${node.w}×${node.h}`;
+                    document.querySelectorAll('.shape-switch-btn').forEach((btn) => {
+                        const active = btn.dataset.shapeBtn === node.type;
+                        btn.className = active
+                            ? 'shape-switch-btn px-2 py-1 text-[11px] font-mono font-bold rounded-lg bg-[#7C5DFA] text-white transition'
+                            : 'shape-switch-btn px-2 py-1 text-[11px] font-mono font-bold rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 transition';
+                    });
+
+                    const boxTopLeft = svgToClientPoint(node.x - node.w / 2, node.y - node.h / 2);
+                    const boxBottomRight = svgToClientPoint(node.x + node.w / 2, node.y + node.h / 2);
+                    positionToolbarAroundBox(nodeToolbar, boxTopLeft, boxBottomRight, canvasRect);
+                }
+            } else if (state.selectedNodeIds.size > 1) {
+                const selNodes = state.layoutNodes.filter((n) => state.selectedNodeIds.has(n.id));
+                if (selNodes.length) {
+                    document.getElementById('multi-select-count').textContent = `${selNodes.length} terpilih`;
+                    const minX = Math.min(...selNodes.map((n) => n.x - n.w / 2));
+                    const minY = Math.min(...selNodes.map((n) => n.y - n.h / 2));
+                    const maxX = Math.max(...selNodes.map((n) => n.x + n.w / 2));
+                    const maxY = Math.max(...selNodes.map((n) => n.y + n.h / 2));
+                    const boxTopLeft = svgToClientPoint(minX, minY);
+                    const boxBottomRight = svgToClientPoint(maxX, maxY);
+                    positionToolbarAroundBox(multiToolbar, boxTopLeft, boxBottomRight, canvasRect);
+                }
+            } else if (state.selectedEdgeIndex !== null) {
+                const edge = state.layoutEdges[state.selectedEdgeIndex];
+                if (edge) {
+                    const inputEl = document.getElementById('edge-label-input');
+                    if (document.activeElement !== inputEl) {
+                        inputEl.value = edge.label || '';
+                    }
+                    const pt = samplePointAlongPolyline(edge._geom?.points || [], edge.labelT);
+                    const centerClient = svgToClientPoint(pt.x, pt.y);
+                    positionToolbarAroundBox(
+                        edgeToolbar,
+                        { x: centerClient.x - 20, y: centerClient.y - 14 },
+                        { x: centerClient.x + 20, y: centerClient.y + 14 },
+                        canvasRect
+                    );
+                }
+            }
+        }
+
+        function pushHistorySnapshot() {
+            if (state.isApplyingHistory) return;
+            state.undoStack.push({
+                code: editorEl.value,
+                customPositions: JSON.parse(JSON.stringify(state.customPositions)),
+                customDimensions: JSON.parse(JSON.stringify(state.customDimensions)),
+                edgeOffsets: JSON.parse(JSON.stringify(state.edgeOffsets))
+            });
+            if (state.undoStack.length > 40) state.undoStack.shift();
+            state.redoStack = [];
+            refreshUndoRedoButtons();
+        }
+
+        function undoAction() {
+            if (!state.undoStack.length) return;
+            state.redoStack.push({
+                code: editorEl.value,
+                customPositions: JSON.parse(JSON.stringify(state.customPositions)),
+                customDimensions: JSON.parse(JSON.stringify(state.customDimensions)),
+                edgeOffsets: JSON.parse(JSON.stringify(state.edgeOffsets))
+            });
+            const prev = state.undoStack.pop();
+            state.isApplyingHistory = true;
+            editorEl.value = prev.code;
+            state.customPositions = prev.customPositions;
+            state.customDimensions = prev.customDimensions;
+            state.edgeOffsets = prev.edgeOffsets;
+            state.isApplyingHistory = false;
+            syncAndRenderFromCode();
+            refreshUndoRedoButtons();
+        }
+
+        function redoAction() {
+            if (!state.redoStack.length) return;
+            state.undoStack.push({
+                code: editorEl.value,
+                customPositions: JSON.parse(JSON.stringify(state.customPositions)),
+                customDimensions: JSON.parse(JSON.stringify(state.customDimensions)),
+                edgeOffsets: JSON.parse(JSON.stringify(state.edgeOffsets))
+            });
+            const next = state.redoStack.pop();
+            state.isApplyingHistory = true;
+            editorEl.value = next.code;
+            state.customPositions = next.customPositions;
+            state.customDimensions = next.customDimensions;
+            state.edgeOffsets = next.edgeOffsets;
+            state.isApplyingHistory = false;
+            syncAndRenderFromCode();
+            refreshUndoRedoButtons();
+        }
+
+        function refreshUndoRedoButtons() {
+            document.getElementById('btn-undo').disabled = state.undoStack.length === 0;
+            document.getElementById('btn-redo').disabled = state.redoStack.length === 0;
+        }
+
+        window.addEventListener('keydown', (ev) => {
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            const isTyping = tag === 'textarea' || tag === 'input' || tag === 'select';
+
+            if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === 'c') {
+                ev.preventDefault();
+                copyDiagramToClipboard();
+                return;
+            }
+            if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !isTyping) {
+                ev.preventDefault();
+                if (ev.shiftKey) redoAction();
+                else undoAction();
+                return;
+            }
+            if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y' && !isTyping) {
+                ev.preventDefault();
+                redoAction();
+                return;
+            }
+            if ((ev.ctrlKey || ev.metaKey) && (ev.key === '=' || ev.key === '+')) {
+                ev.preventDefault();
+                changeZoom(0.12);
+                return;
+            }
+            if ((ev.ctrlKey || ev.metaKey) && ev.key === '-') {
+                ev.preventDefault();
+                changeZoom(-0.12);
+                return;
+            }
+            if ((ev.ctrlKey || ev.metaKey) && ev.key === '0') {
+                ev.preventDefault();
+                setZoom(1);
+                centerDiagramInViewport();
+                return;
+            }
+
+            if (isTyping) return;
+
+            if (ev.code === 'Space') {
+                ev.preventDefault();
+                state.spacePressed = true;
+                viewportEl.classList.add('space-panning');
+                return;
+            }
+
+            if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') {
+                ev.preventDefault();
+                state.selectedEdgeIndex = null;
+                state.selectedNodeIds = new Set(state.layoutNodes.map((n) => n.id));
+                drawSVG();
+                return;
+            }
+
+            if (ev.key === 'Escape') {
+                state.selectedNodeIds.clear();
+                state.selectedEdgeIndex = null;
+                drawSVG();
+                return;
+            }
+
+            if (ev.key === 'Delete' || ev.key === 'Backspace') {
+                if (state.selectedNodeIds.size > 1) deleteMultiSelectedNodes();
+                else if (state.selectedNodeIds.size === 1) deleteSelectedNode();
+                else if (state.selectedEdgeIndex !== null) deleteSelectedEdge();
+            }
+        });
+
+        window.addEventListener('keyup', (ev) => {
+            if (ev.code === 'Space') {
+                state.spacePressed = false;
+                viewportEl.classList.remove('space-panning');
+            }
+        });
+
+        // =========================================================================
+        // 10. COPY HD (JPG/PNG 3X & 4X TANPA MARGIN) & EKSPOR
+        // =========================================================================
+        function buildTightCleanSVGString(includeWhiteBg) {
+            const palette = DIAGRAM_THEMES[state.theme] || DIAGRAM_THEMES.whimsical;
+            const layout = computeLayout(state.parsedGraph);
+            if (!layout.layoutNodes.length) return null;
+
+            const tempSvg = createSvgEl('svg', {
+                xmlns: 'http://www.w3.org/2000/svg'
+            });
+
+            const defs = createSvgEl('defs');
+            const makeMarker = (id, color) => {
+                const m = createSvgEl('marker', {
+                    id,
+                    viewBox: '0 0 10 10',
+                    refX: '8.5',
+                    refY: '5',
+                    markerWidth: '6.5',
+                    markerHeight: '6.5',
+                    orient: 'auto-start-reverse'
+                });
+                m.appendChild(createSvgEl('polygon', { points: '0,1.5 10,5 0,8.5', fill: color }));
+                return m;
+            };
+            defs.appendChild(makeMarker('exp-arrow-normal', palette.arrow));
+            defs.appendChild(makeMarker('exp-arrow-loop', palette.loopArrow));
+            tempSvg.appendChild(defs);
+
+            const contentGroup = createSvgEl('g', { id: 'export-content' });
+
+            // Render edges
+            layout.layoutEdges.forEach((edge) => {
+                const geom = computeEdgeGeometry(edge);
+                edge._expGeom = geom;
+                const strokeCol = edge.isLoop ? palette.loopArrow : palette.arrow;
+                const markerId = edge.isLoop ? 'url(#exp-arrow-loop)' : 'url(#exp-arrow-normal)';
+                contentGroup.appendChild(createSvgEl('path', {
+                    d: geom.d,
+                    fill: 'none',
+                    stroke: strokeCol,
+                    'stroke-width': '2.1',
+                    'stroke-linecap': 'round',
+                    'stroke-linejoin': 'round',
+                    'marker-end': markerId
+                }));
+            });
+
+            // Render edge labels
+            layout.layoutEdges.forEach((edge) => {
+                if (!edge.label) return;
+                const geom = edge._expGeom || computeEdgeGeometry(edge);
+                const pt = samplePointAlongPolyline(geom.points, edge.labelT);
+                const lblLower = edge.label.trim().toLowerCase();
+                let pillFill = '#FFFFFF', pillStroke = '#CBD5E1', pillText = '#334155';
+                if (/^(ya|yes|true|benar)\b/.test(lblLower)) {
+                    pillFill = '#ECFDF5'; pillStroke = '#6EE7B7'; pillText = '#047857';
+                } else if (/^(tidak|no|false|salah|bukan)\b/.test(lblLower)) {
+                    pillFill = '#FFF1F2'; pillStroke = '#FDA4AF'; pillText = '#BE123C';
+                }
+                const pw = Math.max(38, edge.label.length * 7.5 + 18);
+                const ph = 22;
+                const lg = createSvgEl('g', { transform: `translate(${pt.x}, ${pt.y})` });
+                lg.appendChild(createSvgEl('rect', {
+                    x: -pw / 2, y: -ph / 2, width: pw, height: ph, rx: ph / 2,
+                    fill: pillFill, stroke: pillStroke, 'stroke-width': '1.5'
+                }));
+                const t = createSvgEl('text', {
+                    x: 0, y: 0.5, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                    fill: pillText, 'font-family': 'Inter, system-ui, sans-serif',
+                    'font-size': '11', 'font-weight': '700'
+                });
+                t.textContent = edge.label;
+                lg.appendChild(t);
+                contentGroup.appendChild(lg);
+            });
+
+            // Render clean shapes without selection handles
+            const savedSelection = state.selectedNodeIds;
+            state.selectedNodeIds = new Set();
+            layout.layoutNodes.forEach((node) => {
+                contentGroup.appendChild(renderShapeSvg(node, palette));
+            });
+            state.selectedNodeIds = savedSelection;
+
+            tempSvg.appendChild(contentGroup);
+
+            // Hitung batas terluar presisi dari seluruh simbol, jalur panah, dan lencana label (0px margin kosong)
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            const strokePad = 1.5;
+
+            layout.layoutNodes.forEach((node) => {
+                minX = Math.min(minX, node.x - node.w / 2 - strokePad);
+                maxX = Math.max(maxX, node.x + node.w / 2 + strokePad);
+                minY = Math.min(minY, node.y - node.h / 2 - strokePad);
+                maxY = Math.max(maxY, node.y + node.h / 2 + strokePad);
+            });
+
+            layout.layoutEdges.forEach((edge) => {
+                const geom = edge._expGeom || computeEdgeGeometry(edge);
+                (geom.points || []).forEach((pt) => {
+                    minX = Math.min(minX, pt.x - strokePad);
+                    maxX = Math.max(maxX, pt.x + strokePad);
+                    minY = Math.min(minY, pt.y - strokePad);
+                    maxY = Math.max(maxY, pt.y + strokePad);
+                });
+                if (edge.label) {
+                    const pt = samplePointAlongPolyline(geom.points, edge.labelT);
+                    const pw = Math.max(38, edge.label.length * 7.5 + 18);
+                    const ph = 22;
+                    minX = Math.min(minX, pt.x - pw / 2 - 1);
+                    maxX = Math.max(maxX, pt.x + pw / 2 + 1);
+                    minY = Math.min(minY, pt.y - ph / 2 - 1);
+                    maxY = Math.max(maxY, pt.y + ph / 2 + 1);
+                }
+            });
+
+            const cropX = minX;
+            const cropY = minY;
+            const cropW = Math.max(20, maxX - minX);
+            const cropH = Math.max(20, maxY - minY);
+
+            if (includeWhiteBg) {
+                const bgRect = createSvgEl('rect', {
+                    x: cropX,
+                    y: cropY,
+                    width: cropW,
+                    height: cropH,
+                    fill: '#FFFFFF'
+                });
+                tempSvg.insertBefore(bgRect, contentGroup);
+            }
+
+            tempSvg.setAttribute('viewBox', `${cropX} ${cropY} ${cropW} ${cropH}`);
+            tempSvg.setAttribute('width', cropW);
+            tempSvg.setAttribute('height', cropH);
+
+            const serializer = new XMLSerializer();
+            return {
+                svgString: serializer.serializeToString(tempSvg),
+                width: cropW,
+                height: cropH
+            };
+        }
+
+        function renderSvgToCanvas(svgInfo, scale, format, whiteBg) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const blob = new Blob([svgInfo.svgString], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+
+                img.onload = () => {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(svgInfo.width * scale));
+                        canvas.height = Math.max(1, Math.round(svgInfo.height * scale));
+                        const ctx = canvas.getContext('2d');
+                        ctx.imageSmoothingEnabled = true;
+                        ctx.imageSmoothingQuality = 'high';
+
+                        if (format === 'jpg' || whiteBg) {
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        }
+
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        URL.revokeObjectURL(url);
+
+                        const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+                        const quality = format === 'jpg' ? 0.98 : undefined;
+                        canvas.toBlob((outBlob) => {
+                            if (!outBlob) return reject(new Error('Gagal membuat blob gambar'));
+                            resolve({ blob: outBlob, dataUrl: canvas.toDataURL(mime, quality), canvas });
+                        }, mime, quality);
+                    } catch (err) {
+                        URL.revokeObjectURL(url);
+                        reject(err);
+                    }
+                };
+
+                img.onerror = (err) => {
+                    URL.revokeObjectURL(url);
+                    reject(err);
+                };
+
+                img.src = url;
+            });
+        }
+
+        async function copyDiagramToClipboard() {
+            const whiteBg = document.getElementById('opt-white-bg')?.checked ?? true;
+            const svgInfo = buildTightCleanSVGString(whiteBg);
+            if (!svgInfo) {
+                showToast('Tidak ada diagram untuk disalin');
+                return;
+            }
+
+            try {
+                const rendered = await renderSvgToCanvas(svgInfo, state.copyScale, state.copyFormat, whiteBg);
+
+                if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+                    // ClipboardItem standar mendukung image/png di semua browser desktop; jika user memilih JPG, kita tetap hasilkan canvas berlatar solid putih
+                    const pngBlob = rendered.blob.type === 'image/png'
+                        ? rendered.blob
+                        : await new Promise((res) => rendered.canvas.toBlob(res, 'image/png'));
+                    const item = new ClipboardItem({ 'image/png': pngBlob });
+                    await navigator.clipboard.write([item]);
+                    showToast(`Tersalin ke clipboard (${state.copyFormat.toUpperCase()} ${state.copyScale}x HD, tanpa margin)`);
+                    return;
+                }
+
+                openCopyFallbackModal(rendered.dataUrl);
+            } catch {
+                try {
+                    const rendered = await renderSvgToCanvas(svgInfo, state.copyScale, state.copyFormat, true);
+                    openCopyFallbackModal(rendered.dataUrl);
+                } catch {
+                    showToast('Gagal menyalin gambar ke clipboard');
+                }
+            }
+        }
+
+        function openCopyFallbackModal(dataUrl) {
+            const modal = document.getElementById('copy-fallback-modal');
+            const box = document.getElementById('fallback-image-container');
+            box.innerHTML = `<img id="fallback-img-el" src="${dataUrl}" alt="Flowchart HD" class="max-w-full h-auto rounded-lg" />`;
+            modal.classList.remove('hidden');
+        }
+
+        function closeCopyFallbackModal() {
+            document.getElementById('copy-fallback-modal').classList.add('hidden');
+        }
+
+        function copyFallbackImageViaSelection() {
+            const imgEl = document.getElementById('fallback-img-el');
+            if (!imgEl) return;
+            const range = document.createRange();
+            range.selectNode(imgEl);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            try {
+                document.execCommand('copy');
+                showToast('Gambar berhasil disalin (tekan Ctrl+V untuk menempel)');
+            } catch {
+                showToast('Klik kanan pada gambar lalu pilih Copy image');
+            }
+            sel.removeAllRanges();
+        }
+
+        async function downloadDiagram(format, scale) {
+            closeMenus();
+            const svgInfo = buildTightCleanSVGString(true);
+            if (!svgInfo) return;
+
+            if (format === 'svg') {
+                const blob = new Blob([svgInfo.svgString], { type: 'image/svg+xml;charset=utf-8' });
+                triggerDownload(blob, 'flowchart-flowcode.svg');
+                return;
+            }
+
+            const rendered = await renderSvgToCanvas(svgInfo, scale, format, true);
+            const ext = format === 'jpg' ? 'jpg' : 'png';
+            triggerDownload(rendered.blob, `flowchart-flowcode-${scale}x.${ext}`);
+        }
+
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast(`Mengunduh ${filename}`);
+        }
+
+        // =========================================================================
+        // 11. KONTROL UI, EDITOR KODE & INISIALISASI
+        // =========================================================================
+        function updateLineNumbers() {
+            const lines = editorEl.value.split(/\r?\n/).length;
+            let html = '';
+            for (let i = 1; i <= lines; i++) {
+                html += `<div>${i}</div>`;
+            }
+            lineNumbersEl.innerHTML = html;
+        }
+
+        function syncLineNumbersScroll() {
+            lineNumbersEl.scrollTop = editorEl.scrollTop;
+        }
+
+        function handleCodeInput() {
+            updateLineNumbers();
+            syncAndRenderFromCode();
+        }
+
+        function syncAndRenderFromCode() {
+            state.parsedGraph = parseFlowCode(editorEl.value);
+            // Bersihkan posisi kustom untuk node yang sudah tidak ada
+            const validIds = new Set(state.parsedGraph.nodes.map((n) => n.id));
+            Object.keys(state.customPositions).forEach((id) => {
+                if (!validIds.has(id)) delete state.customPositions[id];
+            });
+            Object.keys(state.customDimensions).forEach((id) => {
+                if (!validIds.has(id)) delete state.customDimensions[id];
+            });
+
+            drawSVG();
+        }
+
+        function insertSnippet(snippet) {
+            pushHistorySnapshot();
+            const start = editorEl.selectionStart ?? editorEl.value.length;
+            const end = editorEl.selectionEnd ?? editorEl.value.length;
+            const before = editorEl.value.slice(0, start);
+            const after = editorEl.value.slice(end);
+            editorEl.value = before + snippet + after;
+            const nextPos = start + snippet.length;
+            editorEl.focus();
+            editorEl.setSelectionRange(nextPos, nextPos);
+            handleCodeInput();
+        }
+
+        function loadTemplate(key) {
+            if (!PRESETS[key]) return;
+            pushHistorySnapshot();
+            state.customPositions = {};
+            state.customDimensions = {};
+            state.edgeOffsets = {};
+            state.selectedNodeIds.clear();
+            state.selectedEdgeIndex = null;
+            editorEl.value = PRESETS[key];
+            handleCodeInput();
+            centerDiagramInViewport();
+            showToast('Template dimuat');
+        }
+
+        function resetLayoutPositions() {
+            pushHistorySnapshot();
+            state.customPositions = {};
+            state.customDimensions = {};
+            state.edgeOffsets = {};
+            drawSVG();
+            centerDiagramInViewport();
+            showToast('Tata letak otomatis dikembalikan');
+        }
+
+        function resetAllCanvas() {
+            pushHistorySnapshot();
+            state.customPositions = {};
+            state.customDimensions = {};
+            state.edgeOffsets = {};
+            state.selectedNodeIds.clear();
+            state.selectedEdgeIndex = null;
+            editorEl.value = PRESETS.string_length;
+            handleCodeInput();
+            showToast('Kanvas & kode direset');
+        }
+
+        function copyDSLCode() {
+            const text = editorEl.value;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('Kode DSL disalin'));
+                return;
+            }
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast('Kode DSL disalin');
+        }
+
+        function toggleSyntaxHelp() {
+            document.getElementById('syntax-help-box').classList.toggle('hidden');
+        }
+
+        function toggleEditorPanel() {
+            state.editorVisible = !state.editorVisible;
+            const panel = document.getElementById('editor-panel');
+            const label = document.getElementById('toggle-editor-label');
+            if (state.editorVisible) {
+                panel.classList.remove('hidden');
+                label.textContent = 'Mode Kanvas Penuh';
+            } else {
+                panel.classList.add('hidden');
+                label.textContent = 'Tampilkan Kode';
+            }
+            updateStatusAndToolbars();
+        }
+
+        function toggleCanvasGrid() {
+            state.showGrid = !state.showGrid;
+            const canvasPanel = document.getElementById('canvas-panel');
+            const btn = document.getElementById('btn-toggle-grid');
+            if (state.showGrid) {
+                canvasPanel.classList.remove('no-grid');
+                btn.className = 'px-2 py-1 rounded-xl font-medium text-[#6D28D9] dark:text-whimsical-300 bg-[#F3F0FF] dark:bg-whimsical-500/20 transition';
+            } else {
+                canvasPanel.classList.add('no-grid');
+                btn.className = 'px-2 py-1 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition';
+            }
+        }
+
+        function toggleSnapGrid() {
+            state.snapGrid = !state.snapGrid;
+            const btn = document.getElementById('btn-toggle-snap');
+            if (state.snapGrid) {
+                btn.className = 'px-2 py-1 rounded-xl font-medium text-[#6D28D9] dark:text-whimsical-300 bg-[#F3F0FF] dark:bg-whimsical-500/20 transition';
+                showToast('Snap 20px aktif');
+            } else {
+                btn.className = 'px-2 py-1 rounded-xl font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition';
+                showToast('Geser bebas aktif');
+            }
+        }
+
+        function setDiagramTheme(themeName) {
+            if (!DIAGRAM_THEMES[themeName]) return;
+            state.theme = themeName;
+            ['whimsical', 'pastel', 'mono'].forEach((t) => {
+                const btn = document.getElementById(`theme-btn-${t}`);
+                if (!btn) return;
+                btn.className = t === themeName
+                    ? 'px-2.5 py-1 rounded-xl font-semibold bg-[#7C5DFA] text-white transition'
+                    : 'px-2.5 py-1 rounded-xl font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition';
+            });
+            drawSVG();
+        }
+
+        function setCopyFormat(fmt) {
+            state.copyFormat = fmt;
+            const jpgBtn = document.getElementById('opt-fmt-jpg');
+            const pngBtn = document.getElementById('opt-fmt-png');
+            const activeCls = 'py-1.5 px-2 rounded-xl font-semibold border border-[#7C5DFA] bg-[#F3F0FF] text-[#6D28D9] transition';
+            const idleCls = 'py-1.5 px-2 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition';
+            jpgBtn.className = fmt === 'jpg' ? activeCls : idleCls;
+            pngBtn.className = fmt === 'png' ? activeCls : idleCls;
+            updateCopyButtonLabel();
+        }
+
+        function setCopyScale(scale) {
+            state.copyScale = scale;
+            const s3Btn = document.getElementById('opt-scale-3');
+            const s4Btn = document.getElementById('opt-scale-4');
+            const activeCls = 'py-1.5 px-2 rounded-xl font-semibold border border-[#7C5DFA] bg-[#F3F0FF] text-[#6D28D9] transition';
+            const idleCls = 'py-1.5 px-2 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition';
+            s3Btn.className = scale === 3 ? activeCls : idleCls;
+            s4Btn.className = scale === 4 ? activeCls : idleCls;
+            updateCopyButtonLabel();
+        }
+
+        function updateCopyButtonLabel() {
+            document.getElementById('copy-hd-label').textContent = `Copy HD (${state.copyFormat.toUpperCase()} ${state.copyScale}x)`;
+        }
+
+        function toggleCopyOptions(ev) {
+            ev.stopPropagation();
+            document.getElementById('export-menu').classList.add('hidden');
+            document.getElementById('copy-options-popover').classList.toggle('hidden');
+        }
+
+        function toggleExportMenu(ev) {
+            ev.stopPropagation();
+            document.getElementById('copy-options-popover').classList.add('hidden');
+            document.getElementById('export-menu').classList.toggle('hidden');
+        }
+
+        function closeMenus() {
+            document.getElementById('copy-options-popover').classList.add('hidden');
+            document.getElementById('export-menu').classList.add('hidden');
+        }
+
+        document.addEventListener('click', closeMenus);
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        function setZoom(val, anchorClientX, anchorClientY) {
+            const nextZoom = Math.max(0.25, Math.min(3.0, Number(val.toFixed(2))));
+            const vpRect = viewportEl.getBoundingClientRect();
+            const targetClientX = typeof anchorClientX === 'number' ? anchorClientX : (vpRect.left + vpRect.width / 2);
+            const targetClientY = typeof anchorClientY === 'number' ? anchorClientY : (vpRect.top + vpRect.height / 2);
+
+            const anchorSvg = clientToSvgPoint(targetClientX, targetClientY);
+            const offsetInVpX = targetClientX - vpRect.left;
+            const offsetInVpY = targetClientY - vpRect.top;
+
+            state.zoom = nextZoom;
+            document.getElementById('zoom-readout').textContent = `${Math.round(state.zoom * 100)}%`;
+            document.getElementById('canvas-panel').style.setProperty('--grid-size', `${Math.round(20 * state.zoom)}px`);
+            drawSVG();
+
+            // Jaga titik kursor/tengah layar tetap terkunci pada koordinat diagram yang sama saat zoom berubah
+            const stagePadLeft = 520;
+            const stagePadTop = 320;
+            const m = state.svgMetrics || { minX: 0, minY: 0 };
+            const newStageX = stagePadLeft + (anchorSvg.x - m.minX) * state.zoom;
+            const newStageY = stagePadTop + (anchorSvg.y - m.minY) * state.zoom;
+            viewportEl.scrollLeft = Math.max(0, Math.round(newStageX - offsetInVpX));
+            viewportEl.scrollTop = Math.max(0, Math.round(newStageY - offsetInVpY));
+        }
+
+        function changeZoom(delta) {
+            setZoom(state.zoom + delta);
+        }
+
+        function fitZoomToViewport() {
+            const availW = Math.max(220, viewportEl.clientWidth - 96);
+            const availH = Math.max(220, viewportEl.clientHeight - 130);
+            const scaleX = availW / Math.max(1, state.svgMetrics.width);
+            const scaleY = availH / Math.max(1, state.svgMetrics.height);
+            const fitScale = Math.max(0.25, Math.min(1.15, Math.min(scaleX, scaleY)));
+            state.zoom = Number(fitScale.toFixed(2));
+            document.getElementById('zoom-readout').textContent = `${Math.round(state.zoom * 100)}%`;
+            document.getElementById('canvas-panel').style.setProperty('--grid-size', `${Math.round(20 * state.zoom)}px`);
+            drawSVG();
+            centerDiagramInViewport();
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const el = document.getElementById('toast-banner');
+            el.textContent = msg;
+            el.classList.remove('opacity-0', 'pointer-events-none');
+            el.classList.add('opacity-100');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                el.classList.remove('opacity-100');
+                el.classList.add('opacity-0', 'pointer-events-none');
+            }, 2200);
+        }
+
+        // Bootstrapping
+        window.addEventListener('DOMContentLoaded', () => {
+            editorEl.value = PRESETS.string_length;
+            updateLineNumbers();
+            setupCanvasEvents();
+            syncAndRenderFromCode();
+            centerDiagramInViewport();
+            refreshUndoRedoButtons();
+        });
+    </script>
+</body>
+</html>
